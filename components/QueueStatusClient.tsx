@@ -1,8 +1,9 @@
 'use client';
 
+/* eslint-disable @next/next/no-html-link-for-pages -- Navigation intentionally uses full page loads for reliable mobile access. */
+
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import Link from 'next/link';
 import { HOUSE_BY_CODE, type HouseCode } from '@/lib/houses';
 
 type Ticket = { queueNumber: string; houseCode: HouseCode; groupSize: number; nickname?: string; status: string; groupsAhead: number; estimatedMinutes: number };
@@ -21,9 +22,9 @@ export default function QueueStatusClient({ queueNumber }: { queueNumber: string
 
   const house = ticket ? HOUSE_BY_CODE[ticket.houseCode] : null;
   return <main className="ticket-page" style={{'--accent': house?.accent || '#ff632e'} as React.CSSProperties}>
-    <nav className="nav shell"><Link className="brand" href="/"><span className="brand-mark">A</span><span>Abandoned Institutions</span></Link><Link className="staff-link" href="/">Join another queue</Link></nav>
+    <nav className="nav shell"><a className="brand" href="/"><span className="brand-mark">A</span><span>Abandoned Institutions</span></a><a className="staff-link" href="/">Join another queue</a></nav>
     <section className="ticket-wrap shell">
-      {error ? <div className="empty-ticket"><div className="eyebrow"><span /> Queue lookup</div><h2>We couldn’t find that ticket.</h2><p>{error}</p><Link className="primary-button" href="/">Return home</Link></div> : !ticket ? <p className="loading-copy">Finding your place in the dark…</p> : <>
+      {error ? <div className="empty-ticket"><div className="eyebrow"><span /> Queue lookup</div><h2>We couldn’t find that ticket.</h2><p>{error}</p><a className="primary-button" href="/">Return home</a></div> : !ticket ? <p className="loading-copy">Finding your place in the dark…</p> : <>
         {isNew && <div className="screenshot-banner">Screenshot this page now <span>Your queue number and nickname will be checked at the entrance.</span></div>}
         <div className="ticket-card">
           <div className="ticket-header"><div><span>{house?.name} HAUNTED HOUSE</span><h2>{ticket.queueNumber}</h2></div><span className={`ticket-status status-${ticket.status}`}>{ticket.status}</span></div>

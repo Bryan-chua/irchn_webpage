@@ -1,8 +1,8 @@
 'use client';
 
+/* eslint-disable @next/next/no-html-link-for-pages -- This link intentionally forces a full navigation for reliable mobile access. */
+
 import { FormEvent, useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import Link from 'next/link';
 import { HOUSES } from '@/lib/houses';
 
 type HouseSummary = (typeof HOUSES)[number] & { status: string; waitingCount: number; estimatedMinutes: number };
@@ -10,7 +10,7 @@ type HouseSummary = (typeof HOUSES)[number] & { status: string; waitingCount: nu
 export default function HomeClient() {
   const [houses, setHouses] = useState<HouseSummary[]>(HOUSES.map((house) => ({ ...house, status: 'open', waitingCount: 0, estimatedMinutes: 0 })));
   const [queueNumber, setQueueNumber] = useState('');
-  const router = useRouter();
+  const [showSafeWordInfo, setShowSafeWordInfo] = useState(false);
 
   useEffect(() => {
     const refresh = () => fetch('/api/houses').then((response) => response.json()).then((data) => data.houses && setHouses(data.houses)).catch(() => undefined);
@@ -22,15 +22,19 @@ export default function HomeClient() {
   function lookup(event: FormEvent) {
     event.preventDefault();
     const clean = queueNumber.trim().toUpperCase().replace(/\s+/g, '');
-    if (clean) router.push(`/queue/${encodeURIComponent(clean)}`);
+    if (clean) window.location.assign(`/queue/${encodeURIComponent(clean)}`);
   }
 
   return (
     <main>
-      <nav className="nav shell"><a className="brand" href="#top"><span className="brand-mark">A</span><span>Abandoned Institutions</span></a><Link className="staff-link" href="/moderator">Station master</Link></nav>
+      <nav className="nav shell"><a className="brand" href="#top"><span className="brand-mark">A</span><span>Abandoned Institutions</span></a><a className="staff-link" href="/moderator">Station master</a></nav>
       <section className="hero shell" id="top">
         <div className="eyebrow"><span /> Inter-RC Halloween Night 2026</div><h1>Six houses.<br /><em>One haunted night.</em></h1>
         <p>Pick your haunted house, join the queue, and keep your place while you explore the night.</p>
+        <div className="safe-word-wrap">
+          <div className="safe-word-callout"><span><small>Safe word</small><strong>Pineapple</strong></span><button type="button" aria-label="Learn how the safe word works" aria-expanded={showSafeWordInfo} aria-controls="safe-word-info" onClick={() => setShowSafeWordInfo((visible) => !visible)}>i</button></div>
+          {showSafeWordInfo && <div className="safe-word-info" id="safe-word-info" role="note"><p>Say <b>“Pineapple”</b> at any time during the haunted house if you need the experience to stop. Staff will assist you and guide you out of the haunted house.</p><button type="button" onClick={() => setShowSafeWordInfo(false)}>Got it</button></div>}
+        </div>
         <a className="primary-button" href="#houses">Choose a haunted house <span>↓</span></a>
       </section>
       <section className="queue-section" id="houses"><div className="shell">
