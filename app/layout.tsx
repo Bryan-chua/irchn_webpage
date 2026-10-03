@@ -1,5 +1,12 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import './globals.css';
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover',
+  themeColor: '#0d0c0b',
+};
 
 export const metadata: Metadata = {
   title: 'Abandoned Institutions — Inter-RC Halloween Night 2026',

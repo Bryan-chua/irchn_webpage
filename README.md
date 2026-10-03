@@ -6,8 +6,8 @@ A mobile-first queue system for six NUS residential college haunted houses: RVRC
 
 - Each queue ticket represents one group of 1–8 participants.
 - A participant may hold one ticket for each haunted house at the same time.
-- Each group is expected to take about 2 minutes.
-- Estimated wait time is `groups ahead × 2 minutes` and updates as the queue moves.
+- Each group is expected to take about 4 minutes.
+- Estimated wait time is `groups ahead × 4 minutes` and updates as the queue moves.
 - There is no participant call or notification feature.
 - Station masters verify participants by asking for both the queue number and team nickname.
 - QR codes are not used.
@@ -61,6 +61,20 @@ Requirements: Node.js 22.13 or newer.
 3. Start the development site with `npm run dev`.
 4. Open `http://localhost:3000`.
 
+## Cloudflare deployment
+
+The production Worker is named `irchn-queue` and uses the APAC D1 database
+`irchn-queue-db` through the `DB` binding.
+
+Production URL: `https://irchn-queue.rvrc.workers.dev`
+
+1. Authenticate Wrangler with `npx wrangler login`.
+2. Configure `MODERATOR_PINS` and `MODERATOR_SESSION_SECRET` as Worker secrets.
+3. Deploy with `npm run deploy`.
+
+The API creates the required tables and house-status rows defensively when it
+first accesses a new database.
+
 When no local moderator settings are present, development mode uses `boo2026` for each station. This fallback is disabled in production.
 
 ## Configuration
@@ -88,7 +102,7 @@ The site uses a Cloudflare D1 database through the Sites runtime. Tables and req
 ## Before event day
 
 - Set six unique station access codes and a strong session secret.
-- Confirm whether each haunted house admits exactly one group every 2 minutes. If capacity differs, update the estimate formula.
+- Confirm whether each haunted house admits exactly one group every 4 minutes. If capacity differs, update the estimate formula.
 - Decide how long skipped groups may return and whether they retain their original position.
 - Test all six station logins on the devices that will be used.
 - Run a short load rehearsal with participants joining and moderators processing tickets.

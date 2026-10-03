@@ -31,7 +31,7 @@ export default function HomeClient() {
       <section className="hero shell" id="top">
         <div className="eyebrow"><span /> Inter-RC Halloween Night 2026</div><h1>Six houses.<br /><em>One haunted night.</em></h1>
         <p>Pick your haunted house, join the queue, and keep your place while you explore the night.</p>
-        <a className="primary-button" href="#houses">Choose a haunted house <span>↓</span></a><div className="hero-stamp" aria-hidden="true"><b>02</b><small>MIN / GROUP</small></div>
+        <a className="primary-button" href="#houses">Choose a haunted house <span>↓</span></a>
       </section>
       <section className="queue-section" id="houses"><div className="shell">
         <div className="section-heading"><div><div className="eyebrow"><span /> Live queues</div><h2>Where will you enter?</h2></div><p>Wait times update as each group enters.</p></div>
@@ -44,7 +44,7 @@ export default function HomeClient() {
         ))}</div>
       </div></section>
       <section className="lookup shell"><div><div className="eyebrow"><span /> Already in line?</div><h2>Find your queue</h2><p>Enter the queue number from your screenshot to see your live position.</p></div>
-        <form className="lookup-form" onSubmit={lookup}><label htmlFor="queue-number">QUEUE NUMBER</label><div><input id="queue-number" value={queueNumber} onChange={(event) => setQueueNumber(event.target.value)} placeholder="E.G. RV-0420" required /><button type="submit">Check status →</button></div></form>
+        <form className="lookup-form" onSubmit={lookup}><label htmlFor="queue-number">QUEUE NUMBER</label><div><input id="queue-number" value={queueNumber} onChange={(event) => setQueueNumber(event.target.value)} placeholder="E.G. RV-0420" autoCapitalize="characters" autoCorrect="off" spellCheck={false} enterKeyHint="go" required /><button type="submit">Check status →</button></div></form>
       </section>
       <footer className="shell"><span>Abandoned Institutions · Inter-RC Halloween Night 2026</span><span>Keep your queue screenshot handy.</span></footer>
     </main>

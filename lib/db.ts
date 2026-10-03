@@ -1,5 +1,6 @@
 import { env } from 'cloudflare:workers';
 import { HOUSES } from './houses';
+import { MINUTES_PER_GROUP } from './queue';
 
 export type QueueStatus = 'waiting' | 'entered' | 'skipped' | 'cancelled';
 
@@ -43,6 +44,6 @@ export function publicQueue(entry: Record<string, unknown>, groupsAhead: number)
     status: entry.status,
     joinedAt: entry.joined_at,
     groupsAhead,
-    estimatedMinutes: groupsAhead * 2,
+    estimatedMinutes: groupsAhead * MINUTES_PER_GROUP,
   };
 }
