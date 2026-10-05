@@ -9,6 +9,7 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
+  metadataBase: new URL('https://irchn-queue.rvrc.workers.dev'),
   title: 'Abandoned Institutions — Inter-RC Halloween Night 2026',
   description: 'Join and track the six NUS residential college haunted house queues for Inter-RC Halloween Night 2026.',
   openGraph: {

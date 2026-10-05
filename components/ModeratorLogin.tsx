@@ -11,7 +11,7 @@ export default function ModeratorLogin() {
     event.preventDefault(); setLoading(true); setError('');
     try {
       const response = await fetch('/api/moderator/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ houseCode, pin }) });
-      const data = await response.json();
+      const data = await response.json() as { error?: string };
       if (!response.ok) { setError(data.error || 'Unable to sign in.'); setLoading(false); return; }
       window.location.assign(`/moderator/${houseCode.toLowerCase()}`);
     } catch {

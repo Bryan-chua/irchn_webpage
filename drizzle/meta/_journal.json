@@ -15,6 +15,20 @@
       "when": 1787741920721,
       "tag": "0001_lean_chimera",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1791112724372,
+      "tag": "0002_keen_masked_marvel",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1791114493795,
+      "tag": "0003_shocking_ma_gnuci",
+      "breakpoints": true
     }
   ]
 }

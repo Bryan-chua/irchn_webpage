@@ -6,17 +6,38 @@ import { FormEvent, useEffect, useState } from 'react';
 import { HOUSES } from '@/lib/houses';
 
 type HouseSummary = (typeof HOUSES)[number] & { status: string; waitingCount: number; estimatedMinutes: number };
+type HousesResponse = { houses?: HouseSummary[] };
+
+const REFRESH_MS = 10_000;
+const MAX_REFRESH_MS = 60_000;
 
 export default function HomeClient() {
-  const [houses, setHouses] = useState<HouseSummary[]>(HOUSES.map((house) => ({ ...house, status: 'open', waitingCount: 0, estimatedMinutes: 0 })));
+  const [houses, setHouses] = useState<HouseSummary[]>(HOUSES.map((house) => ({ ...house, status: 'loading', waitingCount: 0, estimatedMinutes: 0 })));
   const [queueNumber, setQueueNumber] = useState('');
   const [showSafeWordInfo, setShowSafeWordInfo] = useState(false);
 
   useEffect(() => {
-    const refresh = () => fetch('/api/houses').then((response) => response.json()).then((data) => data.houses && setHouses(data.houses)).catch(() => undefined);
-    refresh();
-    const timer = setInterval(refresh, 5000);
-    return () => clearInterval(timer);
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout>;
+    let failures = 0;
+    const refresh = async () => {
+      try {
+        const response = await fetch('/api/houses');
+        const data = await response.json() as HousesResponse;
+        if (!response.ok || !data.houses) throw new Error('Unable to refresh house queues.');
+        if (!stopped) setHouses(data.houses);
+        failures = 0;
+      } catch {
+        failures += 1;
+      } finally {
+        if (!stopped) {
+          const backoff = Math.min(MAX_REFRESH_MS, REFRESH_MS * (2 ** failures));
+          timer = setTimeout(refresh, backoff * (0.8 + Math.random() * 0.4));
+        }
+      }
+    };
+    void refresh();
+    return () => { stopped = true; clearTimeout(timer); };
   }, []);
 
   function lookup(event: FormEvent) {

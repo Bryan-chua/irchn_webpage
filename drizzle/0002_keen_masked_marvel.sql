@@ -1,0 +1,1 @@
+ALTER TABLE `house_settings` ADD `last_entered_at` integer;

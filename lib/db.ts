@@ -1,6 +1,6 @@
 import { env } from 'cloudflare:workers';
-import { HOUSES } from './houses';
-import { MINUTES_PER_GROUP } from './queue';
+import type { HouseCode } from './houses';
+import { estimatedWaitSeconds } from './queue';
 
 export type QueueStatus = 'waiting' | 'entered' | 'skipped' | 'cancelled';
 
@@ -8,35 +8,14 @@ export function getDb(): D1Database {
   return (env as unknown as { DB: D1Database }).DB;
 }
 
-export async function ensureDatabase() {
-  const db = getDb();
-  await db.batch([
-    db.prepare(`CREATE TABLE IF NOT EXISTS queue_entries (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      queue_number TEXT NOT NULL UNIQUE,
-      house_code TEXT NOT NULL,
-      nickname TEXT NOT NULL,
-      group_size INTEGER NOT NULL CHECK(group_size BETWEEN 1 AND 8),
-      status TEXT NOT NULL DEFAULT 'waiting',
-      joined_at INTEGER NOT NULL,
-      completed_at INTEGER
-    )`),
-    db.prepare(`CREATE TABLE IF NOT EXISTS house_settings (
-      house_code TEXT PRIMARY KEY,
-      status TEXT NOT NULL DEFAULT 'open'
-    )`),
-    db.prepare(`CREATE INDEX IF NOT EXISTS idx_queue_house_status_joined
-      ON queue_entries(house_code, status, joined_at)`),
-    ...HOUSES.map((house) => db.prepare('INSERT OR IGNORE INTO house_settings (house_code, status) VALUES (?, ?)').bind(house.code, 'open')),
-  ]);
-  return db;
-}
-
 export function cleanQueueNumber(value: string) {
   return value.trim().toUpperCase().replace(/\s+/g, '');
 }
 
-export function publicQueue(entry: Record<string, unknown>, groupsAhead: number) {
+export function publicQueue(entry: Record<string, unknown>, groupsAhead: number, lastEnteredAt?: number | null) {
+  const estimatedSeconds = entry.status === 'waiting'
+    ? estimatedWaitSeconds(entry.house_code as HouseCode, groupsAhead, lastEnteredAt)
+    : 0;
   return {
     queueNumber: entry.queue_number,
     houseCode: entry.house_code,
@@ -44,6 +23,15 @@ export function publicQueue(entry: Record<string, unknown>, groupsAhead: number)
     status: entry.status,
     joinedAt: entry.joined_at,
     groupsAhead,
-    estimatedMinutes: groupsAhead * MINUTES_PER_GROUP,
+    estimatedSeconds,
+    estimatedMinutes: Math.ceil(estimatedSeconds / 60),
   };
+}
+
+export function temporarilyUnavailable(error: unknown) {
+  console.error('Queue database request failed.', error);
+  return Response.json(
+    { error: 'The queue is temporarily busy. Please try again shortly.' },
+    { status: 503, headers: { 'Cache-Control': 'no-store', 'Retry-After': '2' } },
+  );
 }

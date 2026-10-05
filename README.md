@@ -1,109 +1,187 @@
 # Abandoned Institutions Queue System
 
-A mobile-first queue system for six NUS residential college haunted houses: RVRC, CAPT, Acacia, Tembusu, RC4, and NUSC.
+A mobile-first virtual queue for **Inter-RC Halloween Night 2026**, covering six NUS residential college haunted houses: **RVRC, CAPT, Acacia, Tembusu, RC4, and NUSC**.
 
-## Agreed event rules
+**Live site:** [irchn-queue.rvrc.workers.dev](https://irchn-queue.rvrc.workers.dev/)
 
-- Each queue ticket represents one group of 1–8 participants.
-- A participant may hold one ticket for each haunted house at the same time.
-- Each group is expected to take about 4 minutes.
-- Estimated wait time is `groups ahead × 4 minutes` and updates as the queue moves.
-- There is no participant call or notification feature.
-- Station masters verify participants by asking for both the queue number and team nickname.
+# Moderator Pin
+
+RV:135791
+CAPT:135792
+ACACIA:135793
+TEMBUSU:135794
+RC4:135795
+NUSC:135796
+
+## Features
+
+### Participant experience
+
+- View all six haunted houses from one mobile-friendly home page.
+- See each house's live queue status, number of waiting groups, and estimated wait time.
+- Join any open queue with a memorable team nickname and a group size of 1–8 people.
+- Receive a unique queue number, such as `RV-0420`, for the whole group.
+- See a live ticket with the house, queue number, group size, groups ahead, estimated wait, and ticket status.
+- Automatically refresh house summaries and tickets every 5 seconds.
+- Look up an existing ticket from the home page using its queue number.
+- Receive a reminder to move towards the entrance when five or fewer groups remain.
+- See clear ticket messages when a group is waiting, entered, skipped, or no longer active.
+- Get an immediate prompt to screenshot a newly issued ticket for entrance verification.
+- Join queues for multiple haunted houses at the same time, subject to the event rules below.
+- View the event safe word, **Pineapple**, and instructions for using it during the experience.
+
+Team nicknames are visible only to the participant who just joined and the station master. Public ticket lookups never return the nickname.
+
+### Station master experience
+
+- Sign in to a station-specific dashboard using the haunted house and its access code.
+- Manage only the queue associated with the signed-in station.
+- View waiting and skipped groups in queue order, including queue number, private nickname, group size, status, and elapsed wait.
+- Select individual groups or the entire visible queue.
+- Bulk mark selected groups as **entered** or **skipped**.
+- Keep skipped groups visible for manual follow-up without counting them in other groups' wait estimates.
+- Review the 40 most recently entered or cancelled records in the history view.
+- Monitor live totals for waiting groups, estimated clear time, and participants waiting.
+- Change the station queue between **open**, **paused**, and **closed**.
+- Refresh queue data automatically every 4 seconds.
+- Sign out and clear the station session.
+
+### Operational and privacy features
+
+- No participant accounts, real names, phone numbers, email addresses, or NUS IDs are requested.
+- Queue numbers are normalized for case and whitespace during lookup.
+- New joins are rejected while a queue is paused or closed; existing tickets remain viewable.
+- Queue numbers are generated with cryptographically secure randomness and protected by a database uniqueness constraint.
+- Moderator sessions use station-scoped, HTTP-only, same-site cookies derived from a server secret. Production cookies are also secure-only and expire after 12 hours.
+- API responses containing live queue data use `Cache-Control: no-store`.
+- Required D1 tables, indexes, and house settings are created defensively at runtime.
+- Open Graph and Twitter metadata provide a share preview for the event site.
+
+## Event rules and queue behaviour
+
+- One ticket represents one group of 1–8 participants.
+- A participant may hold one active ticket for each haunted house at the same time.
+- Each group is estimated to take 4 minutes.
+- A ticket's estimated wait is `groups ahead × 4 minutes`.
+- A house card's estimated wait is `waiting groups × 4 minutes`.
+- There is no participant notification or call feature; groups must keep checking their live ticket.
+- Station masters verify groups using both the queue number and team nickname.
 - QR codes are not used.
-- Participants are prompted to screenshot the ticket after joining.
-- Team nicknames should not contain real names, phone numbers, email addresses, or other personal information.
-- Nicknames are never displayed publicly.
+- Participants should screenshot their ticket immediately after joining.
+- Team nicknames must not include real names, phone numbers, email addresses, or other personal information.
+- Skipped groups do not count towards queue positions or estimated waits. They remain visible to station masters for manual handling.
 
-## Participant experience
+Queue numbers are saved in local browser storage as a convenience, while the database remains the source of truth. The nickname is kept only in session storage for display on the browser that created the ticket.
 
-1. The home page displays all six haunted houses, their queue status, groups waiting, and estimated wait.
-2. The participant selects a haunted house.
-3. They enter a team nickname and select a group size from 1–8.
-4. The system issues a unique queue number such as `RV-0420`.
-5. The ticket page shows the queue number, nickname, group size, groups ahead, and estimated wait.
-6. The participant is asked to screenshot the page.
-7. The live ticket refreshes automatically every 5 seconds.
-8. The home-page lookup accepts a queue number and opens its live status.
-9. When five or fewer groups remain, the ticket asks the group to move towards the entrance.
+## Status reference
 
-Queue numbers are also saved in browser storage as a convenience, but the database remains the source of truth.
+### House statuses
 
-## Station master experience
+- **Open:** participants may join the queue.
+- **Paused:** new joins are temporarily disabled, while existing tickets remain valid.
+- **Closed:** new joins are disabled, while existing tickets remain valid.
 
-Each station master signs in with their RC and a station-specific access code. They can only manage that RC's queue.
+### Ticket statuses
 
-The dashboard provides:
+- **Waiting:** the group has an active place in line.
+- **Skipped:** the group was unavailable and should speak to the station master.
+- **Entered:** the group has entered the haunted house.
+- **Cancelled:** the ticket is no longer active.
 
-- Current waiting and skipped groups in queue order
-- Queue number, private nickname, group size, elapsed waiting time, and status
-- Checkbox selection similar to an inbox
-- Bulk **Mark as entered** and **Skip** actions
-- An entered/cancelled history view
-- Live counts for waiting groups, estimated clear time, and total participants waiting
-- Controls to open, pause, or close the queue
-- Automatic refresh every 4 seconds
+## Tech stack
 
-Skipped groups no longer count towards other groups' estimated wait. They remain visible so the station master can handle them manually.
-
-## Privacy and retention
-
-The application intentionally does not request real names, phone numbers, emails, NUS IDs, or other direct identifiers. Team nicknames are used only for queue-number verification.
-
-User-provided nicknames should still be handled carefully. Completed records are retained temporarily for operational history and should be deleted after the event or after a short organiser-approved retention period.
+- Next.js 16 and React 19
+- TypeScript
+- vinext and Vite
+- Cloudflare Workers
+- Cloudflare D1 with Drizzle ORM
+- Tailwind CSS 4 tooling with the application's global stylesheet
 
 ## Local development
 
-Requirements: Node.js 22.13 or newer.
+Requirements: **Node.js 22.13 or newer**.
 
-1. Copy `.env.example` to `.env.local` and replace every moderator PIN and the session secret.
-2. Install dependencies with `npm install`.
-3. Start the development site with `npm run dev`.
-4. Open `http://localhost:3000`.
+1. Copy `.env.example` to `.env.local`.
+2. Replace every sample moderator PIN and the session secret.
+3. Install dependencies:
 
-## Cloudflare deployment
+   ```bash
+   npm install
+   ```
 
-The production Worker is named `irchn-queue` and uses the APAC D1 database
-`irchn-queue-db` through the `DB` binding.
+4. Start the development server:
 
-Production URL: `https://irchn-queue.rvrc.workers.dev`
+   ```bash
+   npm run dev
+   ```
 
-1. Authenticate Wrangler with `npx wrangler login`.
-2. Configure `MODERATOR_PINS` and `MODERATOR_SESSION_SECRET` as Worker secrets.
-3. Deploy with `npm run deploy`.
+5. Open `http://localhost:3000`.
 
-The API creates the required tables and house-status rows defensively when it
-first accesses a new database.
+When moderator settings are absent in local development, every station uses `boo2026`. This fallback is disabled in production.
 
-When no local moderator settings are present, development mode uses `boo2026` for each station. This fallback is disabled in production.
+## Available scripts
+
+| Command | Purpose |
+| --- | --- |
+| `npm run dev` | Start the local vinext development server. |
+| `npm run build` | Create the production build. |
+| `npm run start` | Run the built application locally. |
+| `npm run lint` | Run ESLint. |
+| `npm run db:generate` | Generate Drizzle migrations from the schema. |
+| `npm run deploy` | Build and deploy the Cloudflare Worker. |
 
 ## Configuration
 
-`MODERATOR_PINS` is a comma-separated list in this format:
+`MODERATOR_PINS` is a comma-separated mapping of house codes to access codes:
 
 ```text
 RV:pin-one,CP:pin-two,AC:pin-three,TM:pin-four,R4:pin-five,NS:pin-six
 ```
 
-`MODERATOR_SESSION_SECRET` should be a long random value. Never commit production secrets.
+`MODERATOR_SESSION_SECRET` must be a long random value. Never commit production secrets.
 
-The site uses a Cloudflare D1 database through the Sites runtime. Tables and required indexes are created defensively at runtime, and the Drizzle schema is stored in `db/schema.ts`.
+House codes are:
 
-## Queue statuses
+| House | Code |
+| --- | --- |
+| RVRC | `RV` |
+| CAPT | `CP` |
+| Acacia | `AC` |
+| Tembusu | `TM` |
+| RC4 | `R4` |
+| NUSC | `NS` |
 
-- **Open:** participants may join.
-- **Paused:** new joins are temporarily disabled, while existing tickets remain valid.
-- **Closed:** new joins are disabled.
-- **Waiting:** active participant ticket.
-- **Skipped:** group was unavailable; the station master should handle it manually.
-- **Entered:** group entered the haunted house.
-- **Cancelled:** ticket is no longer active.
+## Cloudflare deployment
+
+The production Worker is named `irchn-queue`. It uses the APAC D1 database `irchn-queue-db` through the `DB` binding.
+
+1. Authenticate Wrangler:
+
+   ```bash
+   npx wrangler login
+   ```
+
+2. Configure `MODERATOR_PINS` and `MODERATOR_SESSION_SECRET` as Worker secrets.
+3. Deploy:
+
+   ```bash
+   npm run deploy
+   ```
+
+The application initializes missing tables, indexes, and house-status records the first time it accesses a new database. The Drizzle schema is stored in `db/schema.ts`, with generated migrations in `drizzle/`.
+
+## Privacy and retention
+
+The application deliberately avoids collecting direct participant identifiers. Team nicknames exist only to verify a group against its queue number and must still be handled carefully.
+
+Completed records are retained temporarily for operational history. Organisers should delete them after the event or after a short, approved retention period.
 
 ## Before event day
 
 - Set six unique station access codes and a strong session secret.
-- Confirm whether each haunted house admits exactly one group every 4 minutes. If capacity differs, update the estimate formula.
+- Confirm whether every haunted house admits exactly one group every 4 minutes; update `MINUTES_PER_GROUP` if the estimate changes.
 - Decide how long skipped groups may return and whether they retain their original position.
-- Test all six station logins on the devices that will be used.
-- Run a short load rehearsal with participants joining and moderators processing tickets.
-- Confirm the record-deletion time with the event organiser.
+- Test participant joining, ticket lookup, and all six station logins on the devices that will be used.
+- Verify the **Pineapple** safe-word procedure with event staff.
+- Run a short load rehearsal with participants joining while station masters process groups.
+- Confirm the completed-record deletion time with the event organiser.
