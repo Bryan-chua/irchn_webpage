@@ -7,6 +7,7 @@ import hostingConfig from './.openai/hosting.json';
 const D1_DATABASE_NAME = 'irchn-queue-db';
 const D1_DATABASE_ID = '2b1d9f60-51b1-4840-bd0d-33b3a68463d7';
 const JOIN_RATE_LIMIT_NAMESPACE = '1001';
+const MODERATOR_LOGIN_RATE_LIMIT_NAMESPACE = '1002';
 
 const { d1, r2 } = hostingConfig;
 
@@ -31,6 +32,11 @@ const localBindingConfig = {
       name: 'JOIN_RATE_LIMITER',
       namespace_id: JOIN_RATE_LIMIT_NAMESPACE,
       simple: { limit: 2_000, period: 60 as const },
+    },
+    {
+      name: 'MODERATOR_LOGIN_RATE_LIMITER',
+      namespace_id: MODERATOR_LOGIN_RATE_LIMIT_NAMESPACE,
+      simple: { limit: 3, period: 60 as const },
     },
   ],
   r2_buckets: r2
