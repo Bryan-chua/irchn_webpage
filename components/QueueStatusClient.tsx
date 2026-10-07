@@ -6,7 +6,8 @@ import { useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { HOUSE_BY_CODE, type HouseCode } from '@/lib/houses';
 
-type Ticket = { queueNumber: string; houseCode: HouseCode; groupSize: number; nickname?: string; status: string; groupsAhead: number; estimatedSeconds: number; estimatedMinutes: number };
+type TicketStatus = 'waiting' | 'skipped' | 'entered' | 'cancelled';
+type Ticket = { queueNumber: string; houseCode: HouseCode; groupSize: number; nickname?: string; status: TicketStatus; groupsAhead: number; estimatedSeconds: number; estimatedMinutes: number };
 type TicketResponse = { ticket?: Ticket; error?: string };
 
 const DEFAULT_REFRESH_MS = 30_000;
@@ -80,10 +81,10 @@ export default function QueueStatusClient({ queueNumber }: { queueNumber: string
         <div className="ticket-card">
           <div className="ticket-header"><div><span>{house?.name} HAUNTED HOUSE</span><h2>{ticket.queueNumber}</h2></div><span className={`ticket-status status-${ticket.status}`}>{ticket.status}</span></div>
           {nickname && <div className="nickname-row"><span>TEAM NICKNAME</span><b>{nickname}</b></div>}
-          <div className="ticket-metrics"><div><small>GROUPS AHEAD</small><strong>{ticket.groupsAhead}</strong></div><div><small>ESTIMATED WAIT</small><strong aria-label={`${ticket.estimatedMinutes} minutes estimated`}>{formatCountdown(ticket.estimatedSeconds)}</strong></div><div><small>GROUP SIZE</small><strong>{ticket.groupSize}<i> pax</i></strong></div></div>
+          <div className="ticket-metrics"><div><small>GROUPS AHEAD</small><strong>{ticket.groupsAhead}</strong></div><div><small>{ticket.status === 'waiting' ? 'ESTIMATED WAIT' : 'TICKET STATUS'}</small>{ticket.status === 'waiting' ? <strong aria-label={`${ticket.estimatedMinutes} minutes estimated`}>{formatCountdown(ticket.estimatedSeconds)}</strong> : <strong className={`ticket-primary-status status-${ticket.status}`} aria-label={`Ticket status: ${ticket.status}`}>{ticket.status}</strong>}</div><div><small>GROUP SIZE</small><strong>{ticket.groupSize}<i> pax</i></strong></div></div>
           <div className="ticket-message">{ticket.status === 'waiting' ? (ticket.groupsAhead <= 5 ? 'Please make your way towards the entrance.' : 'Your position updates automatically every few seconds.') : ticket.status === 'entered' ? 'Your group has entered the haunted house.' : ticket.status === 'skipped' ? 'Your group was skipped. Please speak to the station master.' : 'This ticket is no longer active.'}</div>
         </div>
-        <p className="arrival-note"><b>Be nearby when 5 groups remain.</b> The line may move faster when groups do not show up.</p>
+        {ticket.status === 'waiting' && <p className="arrival-note"><b>Be nearby when 5 groups remain.</b> The line may move faster when groups do not show up.</p>}
       </>}
     </section>
   </main>;
