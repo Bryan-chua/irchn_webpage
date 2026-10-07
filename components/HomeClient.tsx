@@ -3,6 +3,8 @@
 /* eslint-disable @next/next/no-html-link-for-pages -- This link intentionally forces a full navigation for reliable mobile access. */
 
 import { FormEvent, useEffect, useState } from 'react';
+import InfoDrawer from '@/components/InfoDrawer';
+import participantGuide from '@/docs/participant.md?raw';
 import { HOUSES } from '@/lib/houses';
 
 type HouseSummary = (typeof HOUSES)[number] & { status: string; waitingCount: number; estimatedMinutes: number };
@@ -48,7 +50,7 @@ export default function HomeClient() {
 
   return (
     <main>
-      <nav className="nav shell"><a className="brand" href="#top"><span className="brand-mark">A</span><span>Abandoned Institutions</span></a><a className="staff-link" href="/moderator">Station master</a></nav>
+      <nav className="nav shell"><a className="brand" href="#top"><span className="brand-mark">A</span><span>Abandoned Institutions</span></a><div className="nav-actions"><InfoDrawer label="Open participant guide" markdown={participantGuide} title="Participant guide" /><a className="staff-link" href="/moderator">Station master</a></div></nav>
       <section className="hero shell" id="top">
         <div className="eyebrow"><span /> Inter-RC Halloween Night 2026</div><h1>Six houses.<br /><em>One haunted night.</em></h1>
         <p>Pick your haunted house, join the queue, and keep your place while you explore the night.</p>

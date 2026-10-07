@@ -29,6 +29,7 @@ export default function QueueStatusClient({ queueNumber }: { queueNumber: string
   const [nickname, setNickname] = useState('');
   const [error, setError] = useState('');
   const isNew = useSearchParams().get('new') === '1';
+  const isExisting = useSearchParams().get('existing') === '1';
 
   useEffect(() => {
     const nicknameTimer = setTimeout(() => { try { const saved = JSON.parse(sessionStorage.getItem(`ticket:${queueNumber}`) || 'null') as Ticket | null; if (saved?.nickname) setNickname(saved.nickname); } catch {} }, 0);
@@ -75,6 +76,7 @@ export default function QueueStatusClient({ queueNumber }: { queueNumber: string
     <section className="ticket-wrap shell">
       {error ? <div className="empty-ticket"><div className="eyebrow"><span /> Queue lookup</div><h2>We couldn’t find that ticket.</h2><p>{error}</p><a className="primary-button" href="/">Return home</a></div> : !ticket ? <p className="loading-copy">Finding your place in the dark…</p> : <>
         {isNew && <div className="screenshot-banner">Screenshot this page now <span>Your queue number and nickname will be checked at the entrance.</span></div>}
+        {isExisting && <div className="existing-ticket-banner">You already have an active ticket for this haunted house. <span>We brought you back to it.</span></div>}
         <div className="ticket-card">
           <div className="ticket-header"><div><span>{house?.name} HAUNTED HOUSE</span><h2>{ticket.queueNumber}</h2></div><span className={`ticket-status status-${ticket.status}`}>{ticket.status}</span></div>
           {nickname && <div className="nickname-row"><span>TEAM NICKNAME</span><b>{nickname}</b></div>}

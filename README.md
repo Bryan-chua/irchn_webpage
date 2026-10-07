@@ -71,7 +71,7 @@ Team nicknames are visible only to the participant who just joined and the stati
 - Team nicknames must not include real names, phone numbers, email addresses, or other personal information.
 - Skipped groups do not count towards queue positions or estimated waits. They remain visible to station masters for manual handling.
 
-Queue numbers are saved in local browser storage as a convenience, while the database remains the source of truth. The nickname is kept only in session storage for display on the browser that created the ticket.
+Queue numbers and a random anonymous device token are saved in local browser storage. The server stores only a one-way hash of the token and uses it to prevent the same browser from holding multiple active tickets for one house. The database remains the source of truth, and the nickname is kept only in session storage for display on the browser that created the ticket.
 
 ## Status reference
 

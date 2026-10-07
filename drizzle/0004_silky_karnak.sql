@@ -1,0 +1,2 @@
+ALTER TABLE `queue_entries` ADD `device_token_hash` text;--> statement-breakpoint
+CREATE UNIQUE INDEX `idx_queue_active_device_house` ON `queue_entries` (`house_code`,`device_token_hash`) WHERE "queue_entries"."device_token_hash" IS NOT NULL AND "queue_entries"."status" IN ('waiting', 'skipped');

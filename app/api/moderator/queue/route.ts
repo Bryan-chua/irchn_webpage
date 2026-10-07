@@ -48,11 +48,19 @@ export async function PATCH(request: Request) {
   const statements = ids.map((id) => db.prepare('UPDATE queue_entries SET status = ?, completed_at = ? WHERE id = ? AND house_code = ?').bind(status, completedAt, id, houseCode));
   if (status === 'entered') {
     statements.push(db.prepare('UPDATE house_settings SET last_entered_at = ? WHERE house_code = ?').bind(completedAt, houseCode));
+  } else if (status === 'waiting') {
+    statements.push(db.prepare(`UPDATE house_settings SET last_entered_at = (
+      SELECT MAX(completed_at) FROM queue_entries
+      WHERE house_code = ? AND status = 'entered'
+    ) WHERE house_code = ?`).bind(houseCode, houseCode));
   }
   try {
     await db.batch(statements);
     return Response.json({ ok: true });
   } catch (error) {
+    if (status === 'waiting' && String(error).includes('UNIQUE constraint failed')) {
+      return Response.json({ error: 'This group cannot be restored because the same browser already has another active ticket for this house.' }, { status: 409 });
+    }
     return temporarilyUnavailable(error);
   }
 }
