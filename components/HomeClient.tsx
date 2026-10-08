@@ -1,20 +1,20 @@
 'use client';
 
-/* eslint-disable @next/next/no-html-link-for-pages -- This link intentionally forces a full navigation for reliable mobile access. */
+/* eslint-disable @next/next/no-html-link-for-pages, @next/next/no-location-assign-relative-destination -- Navigation intentionally uses full page loads for reliable mobile access. */
 
 import { FormEvent, useEffect, useState } from 'react';
 import InfoDrawer from '@/components/InfoDrawer';
 import participantGuide from '@/docs/participant.md?raw';
 import { HOUSES } from '@/lib/houses';
 
-type HouseSummary = (typeof HOUSES)[number] & { status: string; waitingCount: number; estimatedMinutes: number };
+type HouseSummary = (typeof HOUSES)[number] & { status: string; waitingCount: number; estimatedMinutes: number; isDelayed: boolean };
 type HousesResponse = { houses?: HouseSummary[] };
 
 const REFRESH_MS = 10_000;
 const MAX_REFRESH_MS = 60_000;
 
 export default function HomeClient() {
-  const [houses, setHouses] = useState<HouseSummary[]>(HOUSES.map((house) => ({ ...house, status: 'loading', waitingCount: 0, estimatedMinutes: 0 })));
+  const [houses, setHouses] = useState<HouseSummary[]>(HOUSES.map((house) => ({ ...house, status: 'loading', waitingCount: 0, estimatedMinutes: 0, isDelayed: false })));
   const [queueNumber, setQueueNumber] = useState('');
   const [showSafeWordInfo, setShowSafeWordInfo] = useState(false);
 
@@ -66,7 +66,7 @@ export default function HomeClient() {
           <a className={`house-card ${house.status !== 'open' ? 'house-disabled' : ''}`} href={house.status === 'open' ? `/join/${house.code.toLowerCase()}` : undefined} key={house.code} style={{'--accent': house.accent} as React.CSSProperties} aria-disabled={house.status !== 'open'}>
             <div className="card-top"><span className="house-index">0{index + 1}</span><span className={`open-pill status-${house.status}`}><i /> {house.status}</span></div>
             <div><h3>{house.name}</h3><p>Haunted House</p></div>
-            <div className="card-bottom"><span><b>{house.estimatedMinutes}</b> min wait</span><span>{house.waitingCount} {house.waitingCount === 1 ? 'group' : 'groups'} waiting</span><strong>↗</strong></div>
+            <div className="card-bottom"><span aria-label={house.isDelayed ? 'Wait time delayed' : `${house.estimatedMinutes} minute wait`}>{house.isDelayed ? <b>Delayed</b> : <><b>{house.estimatedMinutes}</b> min wait</>}</span><span>{house.waitingCount} {house.waitingCount === 1 ? 'group' : 'groups'} waiting</span><strong>↗</strong></div>
           </a>
         ))}</div>
       </div></section>

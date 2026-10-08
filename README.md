@@ -12,6 +12,7 @@ ACACIA:135793
 TEMBUSU:135794
 RC4:135795
 NUSC:135796
+Bryan:040504
 
 ## Features
 
@@ -22,7 +23,7 @@ NUSC:135796
 - Join any open queue with a memorable team nickname and a group size of 1–8 people.
 - Receive a unique queue number, such as `RV-0420`, for the whole group.
 - See a live ticket with the house, queue number, group size, groups ahead, estimated wait, and ticket status.
-- Automatically refresh house summaries and tickets every 5 seconds.
+- Automatically refresh house summaries and live tickets, with slower or stopped polling after a ticket leaves the waiting queue.
 - Look up an existing ticket from the home page using its queue number.
 - Receive a reminder to move towards the entrance when five or fewer groups remain.
 - See clear ticket messages when a group is waiting, entered, skipped, or no longer active.
@@ -44,7 +45,21 @@ Team nicknames are visible only to the participant who just joined and the stati
 - Monitor live totals for waiting groups, estimated clear time, and participants waiting.
 - Change the station queue between **open**, **paused**, and **closed**.
 - Refresh queue data automatically every 4 seconds.
+- Keep a rolling, 24-hour emergency snapshot of the active queue on the signed-in station device.
+- Fall back to a clearly timestamped, read-only local snapshot if live refreshes fail.
+- Download a CSV backup or print an emergency checklist containing the current waiting and skipped groups.
 - Sign out and clear the station session.
+
+### Overall moderator experience
+
+- Sign in through **Bryan — Overall control** with a separate overall-moderator PIN.
+- Open and unlock all houses, or pause/close all houses while locking station status controls.
+- Control individual house statuses while the event is unlocked.
+- Compare house status, estimated clear time, delays, skipped groups, station activity, and capacity against an editable event closing time.
+- Review and acknowledge persistent operational alerts without deleting their history.
+- Review an audit log of global and station status changes and security warnings.
+- Export an anonymous CSV containing entered-participant totals per haunted house and recorded site issues.
+- Download a separate all-house emergency CSV containing every current waiting and skipped group.
 
 ### Operational and privacy features
 
@@ -54,16 +69,16 @@ Team nicknames are visible only to the participant who just joined and the stati
 - Queue numbers are generated with cryptographically secure randomness and protected by a database uniqueness constraint.
 - Moderator sessions use station-scoped, HTTP-only, same-site cookies derived from a server secret. Production cookies are also secure-only and expire after 12 hours.
 - API responses containing live queue data use `Cache-Control: no-store`.
-- Required D1 tables, indexes, and house settings are created defensively at runtime.
+- D1 tables, indexes, and event-control records are managed through versioned migrations.
 - Open Graph and Twitter metadata provide a share preview for the event site.
 
 ## Event rules and queue behaviour
 
 - One ticket represents one group of 1–8 participants.
 - A participant may hold one active ticket for each haunted house at the same time.
-- Each group is estimated to take 4 minutes.
-- A ticket's estimated wait is `groups ahead × 4 minutes`.
-- A house card's estimated wait is `waiting groups × 4 minutes`.
+- Per-group estimates are configured by house in `lib/queue.ts`.
+- A ticket's estimated wait is based on its waiting groups ahead and the house's configured duration.
+- A house card's estimated clear time is based on all waiting groups and the house's configured duration.
 - There is no participant notification or call feature; groups must keep checking their live ticket.
 - Station masters verify groups using both the queue number and team nickname.
 - QR codes are not used.
@@ -140,6 +155,8 @@ RV:pin-one,CP:pin-two,AC:pin-three,TM:pin-four,R4:pin-five,NS:pin-six
 
 `MODERATOR_SESSION_SECRET` must be a long random value. Never commit production secrets.
 
+`OVERALL_MODERATOR_PIN` is the separate access code for **Bryan — Overall control**. Local development falls back to `bryan2026`; production has no fallback.
+
 House codes are:
 
 | House | Code |
@@ -161,14 +178,14 @@ The production Worker is named `irchn-queue`. It uses the APAC D1 database `irch
    npx wrangler login
    ```
 
-2. Configure `MODERATOR_PINS` and `MODERATOR_SESSION_SECRET` as Worker secrets.
+2. Configure `MODERATOR_PINS`, `OVERALL_MODERATOR_PIN`, and `MODERATOR_SESSION_SECRET` as Worker secrets.
 3. Deploy:
 
    ```bash
    npm run deploy
    ```
 
-The application initializes missing tables, indexes, and house-status records the first time it accesses a new database. The Drizzle schema is stored in `db/schema.ts`, with generated migrations in `drizzle/`.
+The deploy command applies versioned D1 migrations before publishing the Worker. The Drizzle schema is stored in `db/schema.ts`, with generated migrations in `drizzle/`.
 
 ## Privacy and retention
 
@@ -178,8 +195,10 @@ Completed records are retained temporarily for operational history. Organisers s
 
 ## Before event day
 
-- Set six unique station access codes and a strong session secret.
-- Confirm whether every haunted house admits exactly one group every 4 minutes; update `MINUTES_PER_GROUP` if the estimate changes.
+- Set six unique station access codes, a separate overall-moderator PIN, and a strong session secret.
+- Confirm each house's configured time per group in `MINUTES_PER_GROUP`.
+- Sign in as Bryan, set the event closing time, then use **Close all & lock** until the activity is ready to begin.
+- Have every station load its dashboard and download or print an initial emergency queue backup; refresh the download periodically during the event.
 - Decide how long skipped groups may return and whether they retain their original position.
 - Test participant joining, ticket lookup, and all six station logins on the devices that will be used.
 - Verify the **Pineapple** safe-word procedure with event staff.

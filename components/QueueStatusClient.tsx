@@ -13,7 +13,8 @@ type ConnectionIssue = 'offline' | 'stale';
 
 const DEFAULT_REFRESH_MS = 30_000;
 const NEAR_FRONT_REFRESH_MS = 15_000;
-const MAX_REFRESH_MS = 60_000;
+const SKIPPED_REFRESH_MS = 120_000;
+const MAX_RETRY_MS = 60_000;
 
 function formatCountdown(totalSeconds: number, groupsAhead: number) {
   const seconds = Math.max(0, totalSeconds);
@@ -41,6 +42,7 @@ export default function QueueStatusClient({ queueNumber }: { queueNumber: string
     let timer: ReturnType<typeof setTimeout>;
     let failures = 0;
     let hasTicket = false;
+    let terminalStatus = false;
     let refreshMs = DEFAULT_REFRESH_MS;
     const refresh = async () => {
       try {
@@ -49,17 +51,20 @@ export default function QueueStatusClient({ queueNumber }: { queueNumber: string
         if (!response.ok || !data.ticket) throw new Error(data.error || 'Unable to load this queue.');
         hasTicket = true;
         if (!stopped) { setTicket(data.ticket); setError(''); setConnectionIssue(null); setLastUpdatedAt(Date.now()); }
-        refreshMs = data.ticket.status === 'waiting' && data.ticket.groupsAhead <= 5
-          ? NEAR_FRONT_REFRESH_MS
-          : DEFAULT_REFRESH_MS;
+        terminalStatus = data.ticket.status === 'entered' || data.ticket.status === 'cancelled';
+        refreshMs = data.ticket.status === 'skipped'
+          ? SKIPPED_REFRESH_MS
+          : data.ticket.status === 'waiting' && data.ticket.groupsAhead <= 5
+            ? NEAR_FRONT_REFRESH_MS
+            : DEFAULT_REFRESH_MS;
         failures = 0;
       } catch (reason) {
         failures += 1;
         if (!stopped && !hasTicket) setError(reason instanceof Error ? reason.message : 'Unable to load this queue.');
         if (!stopped && hasTicket && (!navigator.onLine || failures >= 2)) setConnectionIssue(navigator.onLine ? 'stale' : 'offline');
       } finally {
-        if (!stopped) {
-          const backoff = Math.min(MAX_REFRESH_MS, refreshMs * (2 ** failures));
+        if (!stopped && !terminalStatus) {
+          const backoff = failures === 0 ? refreshMs : Math.min(MAX_RETRY_MS, DEFAULT_REFRESH_MS * (2 ** failures));
           timer = setTimeout(refresh, backoff * (0.8 + Math.random() * 0.4));
         }
       }

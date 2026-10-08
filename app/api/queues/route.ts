@@ -1,6 +1,7 @@
 import { env } from 'cloudflare:workers';
 import { getDb, publicQueue, temporarilyUnavailable } from '@/lib/db';
 import { isHouseCode } from '@/lib/houses';
+import { raiseAlert, recordSiteError } from '@/lib/operations';
 
 type JoinBody = { houseCode?: string; nickname?: string; groupSize?: number; joinKey?: string; deviceToken?: string };
 type QueueRow = Record<string, unknown> & {
@@ -39,6 +40,12 @@ async function observeJoinRateLimit() {
       console.warn('Observed join traffic above 2,000 requests per minute.', {
         event: 'join_rate_limit_observed',
         mode: 'observe',
+      });
+      await raiseAlert({
+        eventType: 'join_traffic_high',
+        actor: 'system',
+        severity: 'warning',
+        message: 'Queue join traffic exceeded 2,000 requests in one minute.',
       });
     }
   } catch (error) {
@@ -161,6 +168,7 @@ export async function POST(request: Request) {
     }
     return temporarilyUnavailable(new Error('Could not allocate a unique queue number.'));
   } catch (error) {
+    await recordSiteError('queue_join', error);
     return temporarilyUnavailable(error);
   }
 }

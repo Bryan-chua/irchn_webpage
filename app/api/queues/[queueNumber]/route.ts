@@ -1,4 +1,5 @@
 import { cleanQueueNumber, getDb, publicQueue, temporarilyUnavailable } from '@/lib/db';
+import { recordSiteError } from '@/lib/operations';
 
 type QueueRow = Record<string, unknown> & {
   groups_ahead: number;
@@ -33,6 +34,7 @@ export async function GET(_request: Request, context: { params: Promise<{ queueN
       { headers: { 'Cache-Control': 'no-store' } },
     );
   } catch (error) {
+    await recordSiteError('ticket_status', error);
     return temporarilyUnavailable(error);
   }
 }

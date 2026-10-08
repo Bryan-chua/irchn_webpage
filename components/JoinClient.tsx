@@ -1,6 +1,6 @@
 'use client';
 
-/* eslint-disable @next/next/no-html-link-for-pages -- Navigation intentionally uses full page loads for reliable mobile access. */
+/* eslint-disable @next/next/no-html-link-for-pages, @next/next/no-location-assign-relative-destination -- Navigation intentionally uses full page loads for reliable mobile access. */
 
 import { FormEvent, useEffect, useRef, useState } from 'react';
 import { HOUSE_BY_CODE, type HouseCode } from '@/lib/houses';

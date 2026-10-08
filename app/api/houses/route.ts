@@ -1,6 +1,7 @@
 import { getDb, temporarilyUnavailable } from '@/lib/db';
 import { HOUSES, type HouseCode } from '@/lib/houses';
 import { estimatedClearSeconds } from '@/lib/queue';
+import { recordSiteError } from '@/lib/operations';
 
 type HouseRow = {
   house_code: HouseCode;
@@ -12,7 +13,7 @@ type HouseRow = {
 const CACHE_SECONDS = 3;
 
 export async function GET(request: Request) {
-  const cacheKey = new Request(new URL('/api/houses?summary=v2', request.url), { method: 'GET' });
+  const cacheKey = new Request(new URL('/api/houses?summary=v3', request.url), { method: 'GET' });
   const edgeCache = (caches as unknown as { default: Cache }).default;
 
   try {
@@ -39,6 +40,7 @@ export async function GET(request: Request) {
         status: row?.status || 'closed',
         waitingCount,
         estimatedMinutes: Math.ceil(estimatedSeconds / 60),
+        isDelayed: waitingCount > 0 && estimatedSeconds === 0,
       };
     });
     const response = Response.json({ houses }, {
@@ -51,6 +53,7 @@ export async function GET(request: Request) {
     }
     return response;
   } catch (error) {
+    await recordSiteError('house_summary', error);
     return temporarilyUnavailable(error);
   }
 }

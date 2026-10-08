@@ -46,6 +46,8 @@ Wait estimates use a different planned time for each station:
 
 These are estimates. Continue processing the physical line safely even if the displayed time differs from actual operations.
 
+Every successful refresh also saves a private emergency snapshot on the station device. The snapshot contains the current waiting and skipped groups and expires automatically after 24 hours. The dashboard shows when that copy was last saved.
+
 ## 3. Set the queue status
 
 Use the **Queue status** controls at the top of the dashboard:
@@ -63,6 +65,8 @@ Suggested use:
 - Set it to **closed** when the station will not accept more groups, such as at the end of the event.
 
 Changing the queue status does not remove or complete existing tickets.
+
+The overall event moderator may pause or close every house and lock these controls. When locked, the dashboard explains the event-wide status and disables only the three queue-status buttons. You may continue admitting or skipping existing groups. The controls become available again after the overall moderator selects **Open all & unlock**.
 
 ## 4. Admit a group
 
@@ -95,6 +99,17 @@ If a group was marked as entered accidentally, select **Undo** on its history ro
 
 History is intended for short-term operational reference. Participant records should be removed after the event according to the organiser's approved retention plan.
 
+## 7. Prepare an emergency backup
+
+Use the **Emergency backup** controls near the top of the dashboard:
+
+- **Download CSV** saves the current queue order, queue numbers, team nicknames, group sizes, statuses, and snapshot time.
+- **Print list** creates a paper-friendly checklist with spaces to mark groups entered or skipped and to write processing times or notes.
+
+Download or print a fresh copy before opening the station and periodically during the event. These files contain team nicknames, so keep them with authorised event staff and destroy or delete them after the event.
+
+If live refreshes stop working, the dashboard displays its most recent local snapshot with a prominent timestamp. Offline mode is read-only: do not try to process groups in the dashboard. Use the printed list to record entered or skipped groups, then reconcile those handwritten changes in the live dashboard after service returns. Keep the dashboard tab open during an outage; the local snapshot cannot guarantee that the whole website can be reopened while the server is unavailable.
+
 ## End-of-shift checklist
 
 1. Confirm that groups you admitted are marked **entered**.
@@ -108,8 +123,8 @@ Signing out clears the station session and returns the device to the station-mas
 
 - **The dashboard returns to the login page:** the session is missing or has expired. Sign in again with the assigned station and access code.
 - **The dashboard shows the wrong station:** sign out, then sign in with the correct station. A valid session is automatically directed to its assigned dashboard.
-- **The queue is not refreshing:** check the internet connection. The dashboard normally refreshes every four seconds and displays an error if it cannot update.
-- **An action fails:** keep the relevant groups selected, check the connection, and retry after confirming their current status.
+- **The queue is not refreshing:** check the internet connection. The dashboard switches to its timestamped emergency snapshot when one is available and disables all queue actions until a live refresh succeeds.
+- **An action fails:** record any urgent changes on the printed list, check the connection, and wait for a live refresh before reconciling them in the dashboard.
 - **A participant cannot find a ticket:** ask them to check the queue number against their screenshot. Queue lookup ignores letter case and spaces.
 - **A participant's nickname is missing from a reopened ticket:** verify it against their original screenshot and the private nickname shown on your dashboard.
 - **A group was marked entered by mistake:** Click the undo button in **Entered history**.

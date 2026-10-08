@@ -36,5 +36,6 @@ export function estimatedClearSeconds(
   now = Date.now(),
 ) {
   if (waitingGroups <= 0) return 0;
+  if (!lastEnteredAt) return waitingGroups * minutesPerGroup(houseCode) * SECONDS_PER_MINUTE;
   return estimatedWaitSeconds(houseCode, waitingGroups - 1, lastEnteredAt, now);
 }
