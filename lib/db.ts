@@ -12,9 +12,9 @@ export function cleanQueueNumber(value: string) {
   return value.trim().toUpperCase().replace(/\s+/g, '');
 }
 
-export function publicQueue(entry: Record<string, unknown>, groupsAhead: number, lastEnteredAt?: number | null) {
+export function publicQueue(entry: Record<string, unknown>, groupsAhead: number, lastEnteredAt?: number | null, firstWaitingAt?: number | null) {
   const estimatedSeconds = entry.status === 'waiting'
-    ? estimatedWaitSeconds(entry.house_code as HouseCode, groupsAhead, lastEnteredAt)
+    ? estimatedWaitSeconds(entry.house_code as HouseCode, groupsAhead, lastEnteredAt, Date.now(), firstWaitingAt)
     : 0;
   return {
     queueNumber: entry.queue_number,

@@ -7,6 +7,7 @@ type JoinBody = { houseCode?: string; nickname?: string; groupSize?: number; joi
 type QueueRow = Record<string, unknown> & {
   groups_ahead: number;
   last_entered_at: number | null;
+  first_waiting_at: number | null;
 };
 
 type JoinContext = QueueRow & {
@@ -60,7 +61,13 @@ async function existingJoin(db: D1Database, joinKey: string) {
       WHERE ahead.house_code = q.house_code
         AND ahead.status = 'waiting'
         AND ahead.id < q.id
-    ) ELSE 0 END AS groups_ahead
+    ) ELSE 0 END AS groups_ahead,
+    CASE WHEN q.status = 'waiting' THEN (
+      SELECT MIN(ahead.joined_at) FROM queue_entries ahead
+      WHERE ahead.house_code = q.house_code
+        AND ahead.status = 'waiting'
+        AND ahead.id < q.id
+    ) ELSE NULL END AS first_waiting_at
     FROM queue_entries q
     JOIN house_settings hs ON hs.house_code = q.house_code
     WHERE q.join_key = ?
@@ -74,7 +81,13 @@ async function existingDeviceJoin(db: D1Database, houseCode: string, deviceToken
       WHERE ahead.house_code = q.house_code
         AND ahead.status = 'waiting'
         AND ahead.id < q.id
-    ) ELSE 0 END AS groups_ahead
+    ) ELSE 0 END AS groups_ahead,
+    CASE WHEN q.status = 'waiting' THEN (
+      SELECT MIN(ahead.joined_at) FROM queue_entries ahead
+      WHERE ahead.house_code = q.house_code
+        AND ahead.status = 'waiting'
+        AND ahead.id < q.id
+    ) ELSE NULL END AS first_waiting_at
     FROM queue_entries q
     JOIN house_settings hs ON hs.house_code = q.house_code
     WHERE q.house_code = ?
@@ -91,7 +104,13 @@ async function getJoinContext(db: D1Database, joinKey: string, houseCode: string
       WHERE ahead.house_code = q.house_code
         AND ahead.status = 'waiting'
         AND ahead.id < q.id
-    ) ELSE 0 END AS groups_ahead
+    ) ELSE 0 END AS groups_ahead,
+    CASE WHEN q.status = 'waiting' THEN (
+      SELECT MIN(ahead.joined_at) FROM queue_entries ahead
+      WHERE ahead.house_code = q.house_code
+        AND ahead.status = 'waiting'
+        AND ahead.id < q.id
+    ) ELSE NULL END AS first_waiting_at
     FROM house_settings hs
     LEFT JOIN queue_entries q ON q.join_key = ?
     WHERE hs.house_code = ?
@@ -99,7 +118,7 @@ async function getJoinContext(db: D1Database, joinKey: string, houseCode: string
 }
 
 function ticketResponse(entry: QueueRow, status = 200, existing = false) {
-  const ticket = publicQueue(entry, Number(entry.groups_ahead || 0), entry.last_entered_at);
+  const ticket = publicQueue(entry, Number(entry.groups_ahead || 0), entry.last_entered_at, entry.first_waiting_at);
   return Response.json({ ticket: { ...ticket, nickname: entry.nickname }, existing }, {
     status,
     headers: { 'Cache-Control': 'no-store' },
@@ -144,8 +163,8 @@ export async function POST(request: Request) {
           (queue_number, join_key, device_token_hash, house_code, nickname, group_size, status, joined_at)
           VALUES (?, ?, ?, ?, ?, ?, 'waiting', ?)`).bind(queueNumber, joinKey, deviceTokenHash, houseCode, nickname, groupSize, joinedAt).run();
         const id = Number(result.meta.last_row_id);
-        const ahead = await db.prepare(`SELECT COUNT(*) AS count FROM queue_entries
-          WHERE house_code = ? AND status = 'waiting' AND id < ?`).bind(houseCode, id).first<{ count: number }>();
+        const ahead = await db.prepare(`SELECT COUNT(*) AS count, MIN(joined_at) AS first_waiting_at FROM queue_entries
+          WHERE house_code = ? AND status = 'waiting' AND id < ?`).bind(houseCode, id).first<{ count: number; first_waiting_at: number | null }>();
         return ticketResponse({
           queue_number: queueNumber,
           join_key: joinKey,
@@ -156,6 +175,7 @@ export async function POST(request: Request) {
           joined_at: joinedAt,
           groups_ahead: Number(ahead?.count || 0),
           last_entered_at: context.last_entered_at,
+          first_waiting_at: Number(ahead?.first_waiting_at) || null,
         }, 201);
       } catch (error) {
         const duplicateJoin = await existingJoin(db, joinKey);

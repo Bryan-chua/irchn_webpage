@@ -21,9 +21,13 @@ export function estimatedWaitSeconds(
   groupsAhead: number,
   lastEnteredAt?: number | null,
   now = Date.now(),
+  firstWaitingAt?: number | null,
 ) {
   const groupSeconds = minutesPerGroup(houseCode) * SECONDS_PER_MINUTE;
-  if (!lastEnteredAt) return Math.max(0, groupsAhead) * groupSeconds;
+  if (!lastEnteredAt) {
+    const elapsedSeconds = firstWaitingAt ? Math.max(0, Math.floor((now - firstWaitingAt) / 1000)) : 0;
+    return Math.max(0, Math.max(0, groupsAhead) * groupSeconds - elapsedSeconds);
+  }
 
   const elapsedSeconds = Math.max(0, Math.floor((now - lastEnteredAt) / 1000));
   return Math.max(0, (Math.max(0, groupsAhead) + 1) * groupSeconds - elapsedSeconds);
@@ -34,8 +38,9 @@ export function estimatedClearSeconds(
   waitingGroups: number,
   lastEnteredAt?: number | null,
   now = Date.now(),
+  firstWaitingAt?: number | null,
 ) {
   if (waitingGroups <= 0) return 0;
-  if (!lastEnteredAt) return waitingGroups * minutesPerGroup(houseCode) * SECONDS_PER_MINUTE;
+  if (!lastEnteredAt) return estimatedWaitSeconds(houseCode, waitingGroups, null, now, firstWaitingAt);
   return estimatedWaitSeconds(houseCode, waitingGroups - 1, lastEnteredAt, now);
 }

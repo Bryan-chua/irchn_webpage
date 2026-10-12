@@ -8,6 +8,7 @@ type HouseRow = {
   house_code: HouseCode;
   status: string;
   last_entered_at: number | null;
+  first_waiting_at: number | null;
   waiting_count: number;
   skipped_count: number;
   entered_groups: number;
@@ -45,6 +46,7 @@ export async function GET(request: Request) {
         FROM event_settings WHERE id = 1`).first<EventSetting>(),
       db.prepare(`SELECT hs.house_code, hs.status, hs.last_entered_at,
         SUM(CASE WHEN q.status = 'waiting' THEN 1 ELSE 0 END) AS waiting_count,
+        MIN(CASE WHEN q.status = 'waiting' THEN q.joined_at END) AS first_waiting_at,
         SUM(CASE WHEN q.status = 'skipped' THEN 1 ELSE 0 END) AS skipped_count,
         SUM(CASE WHEN q.status = 'entered' THEN 1 ELSE 0 END) AS entered_groups,
         SUM(CASE WHEN q.status = 'entered' THEN q.group_size ELSE 0 END) AS entered_participants
@@ -67,7 +69,7 @@ export async function GET(request: Request) {
       const presence = presenceByCode.get(house.code);
       const waitingCount = Number(row?.waiting_count || 0);
       const skippedCount = Number(row?.skipped_count || 0);
-      const estimatedSeconds = estimatedClearSeconds(house.code, waitingCount, Number(row?.last_entered_at) || null, now);
+      const estimatedSeconds = estimatedClearSeconds(house.code, waitingCount, Number(row?.last_entered_at) || null, now, Number(row?.first_waiting_at) || null);
       const isDelayed = waitingCount > 0 && estimatedSeconds === 0;
       const projectedClearAt = isDelayed ? null : waitingCount > 0 ? now + estimatedSeconds * 1000 : now;
       const closingMarginMinutes = currentSetting.eventEndAt && projectedClearAt

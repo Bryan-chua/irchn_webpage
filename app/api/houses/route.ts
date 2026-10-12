@@ -7,6 +7,7 @@ type HouseRow = {
   house_code: HouseCode;
   status: string;
   last_entered_at: number | null;
+  first_waiting_at: number | null;
   waiting_count: number;
 };
 
@@ -26,7 +27,7 @@ export async function GET(request: Request) {
 
     const db = getDb();
     const rows = await db.prepare(`SELECT hs.house_code, hs.status, hs.last_entered_at,
-      COUNT(q.id) AS waiting_count
+      COUNT(q.id) AS waiting_count, MIN(q.joined_at) AS first_waiting_at
       FROM house_settings hs
       LEFT JOIN queue_entries q ON q.house_code = hs.house_code AND q.status = 'waiting'
       GROUP BY hs.house_code, hs.status, hs.last_entered_at`).all<HouseRow>();
@@ -34,7 +35,7 @@ export async function GET(request: Request) {
     const houses = HOUSES.map((house) => {
       const row = rowByCode.get(house.code);
       const waitingCount = Number(row?.waiting_count || 0);
-      const estimatedSeconds = estimatedClearSeconds(house.code, waitingCount, Number(row?.last_entered_at) || null);
+      const estimatedSeconds = estimatedClearSeconds(house.code, waitingCount, Number(row?.last_entered_at) || null, Date.now(), Number(row?.first_waiting_at) || null);
       return {
         ...house,
         status: row?.status || 'closed',

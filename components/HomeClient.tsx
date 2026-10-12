@@ -66,7 +66,7 @@ export default function HomeClient() {
           <a className={`house-card ${house.status !== 'open' ? 'house-disabled' : ''}`} href={house.status === 'open' ? `/join/${house.code.toLowerCase()}` : undefined} key={house.code} style={{'--accent': house.accent} as React.CSSProperties} aria-disabled={house.status !== 'open'}>
             <div className="card-top"><span className="house-index">0{index + 1}</span><span className={`open-pill status-${house.status}`}><i /> {house.status}</span></div>
             <div><h3>{house.name}</h3><p>Haunted House</p></div>
-            <div className="card-bottom"><span aria-label={house.isDelayed ? 'Wait time delayed' : `${house.estimatedMinutes} minute wait`}>{house.isDelayed ? <b>Delayed</b> : <><b>{house.estimatedMinutes}</b> min wait</>}</span><span>{house.waitingCount} {house.waitingCount === 1 ? 'group' : 'groups'} waiting</span><strong>↗</strong></div>
+            <div className="card-bottom"><span>{house.waitingCount === 0 ? <b>No wait</b> : house.isDelayed ? <b>Delayed</b> : <>About <b>{house.estimatedMinutes}</b> min wait</>}</span><span>{house.waitingCount} {house.waitingCount === 1 ? 'group' : 'groups'} waiting</span><strong>↗</strong></div>
           </a>
         ))}</div>
       </div></section>

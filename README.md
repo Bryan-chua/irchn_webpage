@@ -79,6 +79,8 @@ Team nicknames are visible only to the participant who just joined and the stati
 - Per-group estimates are configured by house in `lib/queue.ts`.
 - A ticket's estimated wait is based on its waiting groups ahead and the house's configured duration.
 - A house card's estimated clear time is based on all waiting groups and the house's configured duration.
+- Before a house records its first entry, estimates use the earliest waiting group's join time as the countdown anchor. After a group is marked entered, estimates use that recorded entry time.
+- Public wait estimates show approximate whole minutes; an overdue queue shows "Delayed", a ticket at the front shows "Up next", and an empty queue shows "No wait".
 - There is no participant notification or call feature; groups must keep checking their live ticket.
 - Station masters verify groups using both the queue number and team nickname.
 - QR codes are not used.
