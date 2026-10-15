@@ -54,18 +54,26 @@ export async function PATCH(request: Request) {
   if (!ids.length || !status || !['waiting', 'entered', 'skipped', 'cancelled'].includes(status)) {
     return Response.json({ error: 'Choose at least one valid queue entry and action.' }, { status: 400 });
   }
+  const previousStatuses: Record<string, string> = {
+    waiting: "'skipped', 'entered'",
+    entered: "'waiting', 'skipped'",
+    skipped: "'waiting'",
+    cancelled: "'waiting', 'skipped'",
+  };
   const completedAt = ['entered', 'cancelled'].includes(status) ? Date.now() : null;
-  const statements = ids.map((id) => db.prepare('UPDATE queue_entries SET status = ?, completed_at = ? WHERE id = ? AND house_code = ?').bind(status, completedAt, id, houseCode));
-  if (status === 'entered') {
-    statements.push(db.prepare('UPDATE house_settings SET last_entered_at = ? WHERE house_code = ?').bind(completedAt, houseCode));
-  } else if (status === 'waiting') {
+  const statements = ids.map((id) => db.prepare(`UPDATE queue_entries SET status = ?, completed_at = ?
+    WHERE id = ? AND house_code = ? AND status IN (${previousStatuses[status]})`).bind(status, completedAt, id, houseCode));
+  if (status === 'entered' || status === 'waiting') {
     statements.push(db.prepare(`UPDATE house_settings SET last_entered_at = (
       SELECT MAX(completed_at) FROM queue_entries
       WHERE house_code = ? AND status = 'entered'
     ) WHERE house_code = ?`).bind(houseCode, houseCode));
   }
   try {
-    await db.batch(statements);
+    const results = await db.batch(statements);
+    if (results.slice(0, ids.length).every((result) => !result.meta.changes)) {
+      return Response.json({ error: 'These groups have already changed status. Refresh the queue and try again.' }, { status: 409 });
+    }
     return Response.json({ ok: true });
   } catch (error) {
     if (status === 'waiting' && String(error).includes('UNIQUE constraint failed')) {

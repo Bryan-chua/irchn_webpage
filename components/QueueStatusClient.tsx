@@ -2,7 +2,7 @@
 
 /* eslint-disable @next/next/no-html-link-for-pages -- Navigation intentionally uses full page loads for reliable mobile access. */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { HOUSE_BY_CODE, type HouseCode } from '@/lib/houses';
 
@@ -27,6 +27,7 @@ export default function QueueStatusClient({ queueNumber }: { queueNumber: string
   const [error, setError] = useState('');
   const [connectionIssue, setConnectionIssue] = useState<ConnectionIssue | null>(null);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<number | null>(null);
+  const reminderDialog = useRef<HTMLDialogElement>(null);
   const isNew = useSearchParams().get('new') === '1';
   const isExisting = useSearchParams().get('existing') === '1';
 
@@ -78,6 +79,20 @@ export default function QueueStatusClient({ queueNumber }: { queueNumber: string
     return () => clearInterval(timer);
   }, [connectionIssue]);
 
+  useEffect(() => {
+    if (!isNew || ticket?.status !== 'waiting') return;
+    try {
+      if (localStorage.getItem(`queue-check-reminder:${ticket.queueNumber}`)) return;
+    } catch {}
+    if (!reminderDialog.current?.open) reminderDialog.current?.showModal();
+  }, [isNew, ticket?.queueNumber, ticket?.status]);
+
+  function dismissReminder() {
+    if (ticket) {
+      try { localStorage.setItem(`queue-check-reminder:${ticket.queueNumber}`, '1'); } catch {}
+    }
+  }
+
   const house = ticket ? HOUSE_BY_CODE[ticket.houseCode] : null;
   return <main className="ticket-page" style={{'--accent': house?.accent || '#ff632e'} as React.CSSProperties}>
     <nav className="nav shell"><a className="brand" href="/"><span className="brand-mark">A</span><span>Abandoned Institutions</span></a><a className="staff-link" href="/">Join another queue</a></nav>
@@ -95,5 +110,11 @@ export default function QueueStatusClient({ queueNumber }: { queueNumber: string
         {ticket.status === 'waiting' && <p className="arrival-note"><b>Be nearby when 5 groups remain.</b> The line may move faster when groups do not show up.</p>}
       </>}
     </section>
+    <dialog className="queue-reminder-dialog" ref={reminderDialog} onClose={dismissReminder} aria-labelledby="queue-reminder-title" aria-describedby="queue-reminder-description">
+      <div className="eyebrow"><span /> Your live ticket</div>
+      <h2 id="queue-reminder-title">Check your queue regularly</h2>
+      <p id="queue-reminder-description">Your position can change quickly. Come back to this ticket to check how many groups are ahead. From the home page, tap <b>{house?.name}</b> to reopen it. If that house card is unavailable, use <b>Find your queue</b> with the queue number in your screenshot. When five groups remain, head toward the entrance.</p>
+      <button type="button" onClick={() => reminderDialog.current?.close()}>Got it</button>
+    </dialog>
   </main>;
 }

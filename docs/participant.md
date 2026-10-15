@@ -4,7 +4,7 @@ This guide explains how participants use the **Abandoned Institutions Queue Syst
 
 ## Before joining a queue
 
-- One queue ticket covers one group of **1 to 8 people**.
+- One queue ticket covers one group of **1 to 8 people**, or **1 to 5 people for RC4**.
 - You can hold an active ticket for more than one haunted house.
 - You can hold only one active ticket for the same haunted house in the same browser. If you try again, the website returns you to your existing ticket.
 - Choose a team nickname that everyone in your group will remember.
@@ -26,7 +26,7 @@ You cannot join a paused or closed queue. If you already have a ticket, it remai
 ## 2. Join the queue
 
 1. Enter a team nickname between **2 and 30 characters**.
-2. Select the number of people in your group, from **1 to 8**.
+2. Select the number of people in your group, from **1 to 8** (**1 to 5 for RC4**).
 3. Select **Join _[house name]_ queue**.
 4. Wait for the ticket page to appear. Avoid pressing the join button repeatedly while the request is processing.
 
@@ -35,6 +35,8 @@ The website creates one queue number for the entire group, for example `RV-0420`
 ## 3. Save and use your ticket
 
 Take a screenshot as soon as the ticket appears. The station master will use the **queue number** and **team nickname** to verify your group at the entrance.
+
+The new-ticket popup reminds you to check your position regularly. You can reopen an active ticket from its house card while that queue is open, or use **Find your queue** and your queue number if the card is unavailable.
 
 Your ticket displays:
 

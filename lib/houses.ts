@@ -8,6 +8,14 @@ export const HOUSES = [
 ] as const;
 
 export type HouseCode = (typeof HOUSES)[number]['code'];
+export const MAX_GROUP_SIZE: Record<HouseCode, number> = {
+  RV: 8,
+  CP: 8,
+  AC: 8,
+  TM: 8,
+  R4: 5,
+  NS: 8,
+};
 export const HOUSE_CODES = HOUSES.map((house) => house.code);
 export const HOUSE_BY_CODE = Object.fromEntries(HOUSES.map((house) => [house.code, house])) as Record<HouseCode, (typeof HOUSES)[number]>;
 

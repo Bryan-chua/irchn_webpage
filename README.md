@@ -20,7 +20,7 @@ Bryan:040504
 
 - View all six haunted houses from one mobile-friendly home page.
 - See each house's live queue status, number of waiting groups, and estimated wait time.
-- Join any open queue with a memorable team nickname and a group size of 1–8 people.
+- Join any open queue with a memorable team nickname and a group size of 1–8 people, or 1–5 people for RC4.
 - Receive a unique queue number, such as `RV-0420`, for the whole group.
 - See a live ticket with the house, queue number, group size, groups ahead, estimated wait, and ticket status.
 - Automatically refresh house summaries and live tickets, with slower or stopped polling after a ticket leaves the waiting queue.
@@ -28,6 +28,7 @@ Bryan:040504
 - Receive a reminder to move towards the entrance when five or fewer groups remain.
 - See clear ticket messages when a group is waiting, entered, skipped, or no longer active.
 - Get an immediate prompt to screenshot a newly issued ticket for entrance verification.
+- See a one-time popup after joining that explains how to check the ticket again and when to head to the entrance.
 - Join queues for multiple haunted houses at the same time, subject to the event rules below.
 - View the event safe word, **Pineapple**, and instructions for using it during the experience.
 
@@ -68,20 +69,20 @@ Team nicknames are visible only to the participant who just joined and the stati
 - New joins are rejected while a queue is paused or closed; existing tickets remain viewable.
 - Queue numbers are generated with cryptographically secure randomness and protected by a database uniqueness constraint.
 - Moderator sessions use station-scoped, HTTP-only, same-site cookies derived from a server secret. Production cookies are also secure-only and expire after 12 hours.
-- API responses containing live queue data use `Cache-Control: no-store`.
+- Individual tickets and moderator queue responses use `Cache-Control: no-store`; public house summaries use a three-second cache.
 - D1 tables, indexes, and event-control records are managed through versioned migrations.
 - Open Graph and Twitter metadata provide a share preview for the event site.
 
 ## Event rules and queue behaviour
 
-- One ticket represents one group of 1–8 participants.
+- One ticket represents one group of 1–8 participants, except RC4, which allows 1–5 participants.
 - A participant may hold one active ticket for each haunted house at the same time.
 - Per-group estimates are configured by house in `lib/queue.ts`.
 - A ticket's estimated wait is based on its waiting groups ahead and the house's configured duration.
 - A house card's estimated clear time is based on all waiting groups and the house's configured duration.
 - Before a house records its first entry, estimates use the earliest waiting group's join time as the countdown anchor. After a group is marked entered, estimates use that recorded entry time.
 - Public wait estimates show approximate whole minutes; an overdue queue shows "Delayed", a ticket at the front shows "Up next", and an empty queue shows "No wait".
-- There is no participant notification or call feature; groups must keep checking their live ticket.
+- There is no push notification or call feature; groups must keep checking their live ticket. The popup appears only after joining, while the site is open.
 - Station masters verify groups using both the queue number and team nickname.
 - QR codes are not used.
 - Participants should screenshot their ticket immediately after joining.

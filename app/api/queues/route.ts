@@ -1,6 +1,6 @@
 import { env } from 'cloudflare:workers';
 import { getDb, publicQueue, temporarilyUnavailable } from '@/lib/db';
-import { isHouseCode } from '@/lib/houses';
+import { isHouseCode, MAX_GROUP_SIZE } from '@/lib/houses';
 import { raiseAlert, recordSiteError } from '@/lib/operations';
 
 type JoinBody = { houseCode?: string; nickname?: string; groupSize?: number; joinKey?: string; deviceToken?: string };
@@ -145,7 +145,8 @@ export async function POST(request: Request) {
     const deviceTokenHash = await tokenHash(deviceToken);
     if (!isHouseCode(houseCode)) return Response.json({ error: 'Choose a valid haunted house.' }, { status: 400 });
     if (nickname.length < 2 || nickname.length > 30) return Response.json({ error: 'Use a team nickname between 2 and 30 characters.' }, { status: 400 });
-    if (!Number.isInteger(groupSize) || groupSize < 1 || groupSize > 8) return Response.json({ error: 'Group size must be between 1 and 8.' }, { status: 400 });
+    const maxGroupSize = MAX_GROUP_SIZE[houseCode];
+    if (!Number.isInteger(groupSize) || groupSize < 1 || groupSize > maxGroupSize) return Response.json({ error: `Group size must be between 1 and ${maxGroupSize} for this house.` }, { status: 400 });
 
     const context = await getJoinContext(db, joinKey, houseCode);
     if (context?.queue_number) return ticketResponse(context);
