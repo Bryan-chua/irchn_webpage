@@ -160,7 +160,7 @@ export async function PATCH(request: Request) {
     }
 
     if (body?.houseCode || body?.houseStatus) {
-      const houseCode = body.houseCode?.toUpperCase() || '';
+      const houseCode = typeof body.houseCode === 'string' ? body.houseCode.toUpperCase() : '';
       if (!isHouseCode(houseCode) || !body.houseStatus || !['open', 'paused', 'closed'].includes(body.houseStatus)) {
         return Response.json({ error: 'Choose a valid house and status.' }, { status: 400 });
       }

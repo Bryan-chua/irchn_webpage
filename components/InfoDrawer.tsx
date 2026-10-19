@@ -7,7 +7,10 @@ type InfoDrawerProps = {
   markdown: string;
   title: string;
   variant?: 'site' | 'dashboard';
+  firstVisitTip?: boolean;
 };
+
+const FIRST_VISIT_TIP_KEY = 'participant-guide-tip-seen-v1';
 
 function slugify(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
@@ -97,8 +100,9 @@ function MarkdownContent({ markdown, idPrefix }: { markdown: string; idPrefix: s
   return blocks;
 }
 
-export default function InfoDrawer({ label, markdown, title, variant = 'site' }: InfoDrawerProps) {
+export default function InfoDrawer({ label, markdown, title, variant = 'site', firstVisitTip = false }: InfoDrawerProps) {
   const [open, setOpen] = useState(false);
+  const [showFirstVisitTip, setShowFirstVisitTip] = useState(false);
   const reactId = useId().replace(/:/g, '');
   const titleId = `info-title-${reactId}`;
   const idPrefix = `info-${reactId}`;
@@ -109,6 +113,25 @@ export default function InfoDrawer({ label, markdown, title, variant = 'site' }:
     const match = line.match(/^## (.+)$/);
     return match ? [{ label: match[1], id: `${idPrefix}-${slugify(match[1])}` }] : [];
   }), [idPrefix, markdown]);
+
+  useEffect(() => {
+    if (!firstVisitTip) return;
+    try {
+      if (localStorage.getItem(FIRST_VISIT_TIP_KEY)) return;
+    } catch { /* The tip can still appear when storage is unavailable. */ }
+    const timer = setTimeout(() => setShowFirstVisitTip(true), 0);
+    return () => clearTimeout(timer);
+  }, [firstVisitTip]);
+
+  function dismissFirstVisitTip() {
+    setShowFirstVisitTip(false);
+    try { localStorage.setItem(FIRST_VISIT_TIP_KEY, '1'); } catch { /* Dismiss for this visit. */ }
+  }
+
+  function openGuide() {
+    if (showFirstVisitTip) dismissFirstVisitTip();
+    setOpen(true);
+  }
 
   useEffect(() => {
     if (!open) return;
@@ -136,7 +159,15 @@ export default function InfoDrawer({ label, markdown, title, variant = 'site' }:
   }, [open]);
 
   return <>
-    <button className={`info-trigger info-trigger-${variant}`} type="button" aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(true)} ref={triggerButton}><span aria-hidden="true">i</span><span className="sr-only">{label}</span></button>
+    <span className={firstVisitTip ? 'info-tour-anchor' : undefined}>
+      <button className={`info-trigger info-trigger-${variant}${showFirstVisitTip ? ' info-trigger-highlight' : ''}`} type="button" aria-haspopup="dialog" aria-expanded={open} aria-describedby={showFirstVisitTip ? 'participant-guide-tip' : undefined} onClick={openGuide} ref={triggerButton}><span aria-hidden="true">i</span><span className="sr-only">{label}</span></button>
+      {showFirstVisitTip && <span className="info-tour-tip" id="participant-guide-tip" role="status">
+        <span className="info-tour-arrow" aria-hidden="true">↑</span>
+        <strong>Before you enter…</strong>
+        <span>Tap <b>ⓘ</b> for the participant guide, including what to expect and important safety information.</span>
+        <span className="info-tour-actions"><button type="button" onClick={openGuide}>Open guide</button><button type="button" onClick={dismissFirstVisitTip}>Got it</button></span>
+      </span>}
+    </span>
     {open && <div className="info-overlay" onMouseDown={(event) => { if (event.target === event.currentTarget) setOpen(false); }}>
       <section className="info-drawer" role="dialog" aria-modal="true" aria-labelledby={titleId} ref={drawer}>
         <header><div><small>Information</small><h2 id={titleId}>{title}</h2></div><button className="info-close" type="button" aria-label={`Close ${label}`} onClick={() => setOpen(false)} ref={closeButton}>×</button></header>

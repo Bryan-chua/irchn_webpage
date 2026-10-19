@@ -54,7 +54,7 @@ async function observeJoinRateLimit() {
   }
 }
 
-async function existingJoin(db: D1Database, joinKey: string) {
+async function existingJoin(db: D1Database, joinKey: string, houseCode: string) {
   return db.prepare(`SELECT q.*, hs.last_entered_at,
     CASE WHEN q.status = 'waiting' THEN (
       SELECT COUNT(*) FROM queue_entries ahead
@@ -70,8 +70,8 @@ async function existingJoin(db: D1Database, joinKey: string) {
     ) ELSE NULL END AS first_waiting_at
     FROM queue_entries q
     JOIN house_settings hs ON hs.house_code = q.house_code
-    WHERE q.join_key = ?
-    LIMIT 1`).bind(joinKey).first<QueueRow>();
+    WHERE q.join_key = ? AND q.house_code = ?
+    LIMIT 1`).bind(joinKey, houseCode).first<QueueRow>();
 }
 
 async function existingDeviceJoin(db: D1Database, houseCode: string, deviceTokenHash: string) {
@@ -112,7 +112,7 @@ async function getJoinContext(db: D1Database, joinKey: string, houseCode: string
         AND ahead.id < q.id
     ) ELSE NULL END AS first_waiting_at
     FROM house_settings hs
-    LEFT JOIN queue_entries q ON q.join_key = ?
+    LEFT JOIN queue_entries q ON q.join_key = ? AND q.house_code = hs.house_code
     WHERE hs.house_code = ?
     LIMIT 1`).bind(joinKey, houseCode).first<JoinContext>();
 }
@@ -128,19 +128,19 @@ function ticketResponse(entry: QueueRow, status = 200, existing = false) {
 export async function POST(request: Request) {
   await observeJoinRateLimit();
   const body = await request.json().catch(() => null) as JoinBody | null;
-  const joinKey = body?.joinKey?.trim() || '';
+  const joinKey = typeof body?.joinKey === 'string' ? body.joinKey.trim() : '';
   if (!validJoinKey(joinKey)) {
     return Response.json({ error: 'A valid join request key is required.' }, { status: 400 });
   }
-  const deviceToken = body?.deviceToken?.trim() || '';
+  const deviceToken = typeof body?.deviceToken === 'string' ? body.deviceToken.trim() : '';
   if (!validJoinKey(deviceToken)) {
     return Response.json({ error: 'A valid anonymous device token is required.' }, { status: 400 });
   }
 
   try {
     const db = getDb();
-    const houseCode = body?.houseCode?.toUpperCase() || '';
-    const nickname = body?.nickname?.trim().replace(/\s+/g, ' ') || '';
+    const houseCode = typeof body?.houseCode === 'string' ? body.houseCode.toUpperCase() : '';
+    const nickname = typeof body?.nickname === 'string' ? body.nickname.trim().replace(/\s+/g, ' ') : '';
     const groupSize = Number(body?.groupSize);
     const deviceTokenHash = await tokenHash(deviceToken);
     if (!isHouseCode(houseCode)) return Response.json({ error: 'Choose a valid haunted house.' }, { status: 400 });
@@ -179,10 +179,13 @@ export async function POST(request: Request) {
           first_waiting_at: Number(ahead?.first_waiting_at) || null,
         }, 201);
       } catch (error) {
-        const duplicateJoin = await existingJoin(db, joinKey);
+        const duplicateJoin = await existingJoin(db, joinKey, houseCode);
         if (duplicateJoin) return ticketResponse(duplicateJoin);
         const duplicateDeviceTicket = await existingDeviceJoin(db, houseCode, deviceTokenHash);
         if (duplicateDeviceTicket) return ticketResponse(duplicateDeviceTicket, 200, true);
+        if (String(error).includes('queue_entries.join_key')) {
+          return Response.json({ error: 'This join request key was already used for another house. Please try again.' }, { status: 409 });
+        }
         if (attempt < 7 && String(error).includes('queue_entries.queue_number')) continue;
         throw error;
       }

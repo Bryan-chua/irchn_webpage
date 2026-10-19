@@ -58,9 +58,10 @@ async function failedLoginAllowed(request: Request, houseCode: string) {
 
 export async function POST(request: Request) {
   const body = await request.json().catch(() => null) as { houseCode?: string; pin?: string } | null;
-  const requestedScope = body?.houseCode?.toUpperCase() || '';
+  const requestedScope = typeof body?.houseCode === 'string' ? body.houseCode.toUpperCase() : '';
   const scope = (requestedScope === OVERALL_MODERATOR || isHouseCode(requestedScope)) ? requestedScope as ModeratorScope : null;
-  const valid = scope && body?.pin && (scope === OVERALL_MODERATOR ? await verifyOverallPin(body.pin) : await verifyPin(scope, body.pin));
+  const pin = typeof body?.pin === 'string' ? body.pin : '';
+  const valid = scope && pin && (scope === OVERALL_MODERATOR ? await verifyOverallPin(pin) : await verifyPin(scope, pin));
   if (!valid || !scope) {
     if (!await failedLoginAllowed(request, requestedScope)) {
       return Response.json(
@@ -73,5 +74,10 @@ export async function POST(request: Request) {
   if (isHouseCode(scope)) {
     try { await recordStationPresence(scope, true); } catch (error) { console.warn('Could not record station login activity.', error); }
   }
-  return Response.json({ houseCode: scope }, { headers: { 'Set-Cookie': await sessionCookie(scope) } });
+  try {
+    return Response.json({ houseCode: scope }, { headers: { 'Set-Cookie': await sessionCookie(scope), 'Cache-Control': 'no-store' } });
+  } catch (error) {
+    console.error('Moderator session configuration is unavailable.', error);
+    return Response.json({ error: 'Moderator sign-in is temporarily unavailable.' }, { status: 503, headers: { 'Cache-Control': 'no-store' } });
+  }
 }

@@ -50,7 +50,7 @@ export default function HomeClient() {
 
   return (
     <main>
-      <nav className="nav shell"><a className="brand" href="#top"><span className="brand-mark">A</span><span>Abandoned Institutions</span></a><div className="nav-actions"><InfoDrawer label="Open participant guide" markdown={participantGuide} title="Participant guide" /><a className="staff-link" href="/moderator">Station master</a></div></nav>
+      <nav className="nav shell"><a className="brand" href="#top"><span className="brand-mark">A</span><span>Abandoned Institutions</span></a><div className="nav-actions"><InfoDrawer label="Open participant guide" markdown={participantGuide} title="Participant guide" firstVisitTip /><a className="staff-link" href="/moderator">Station master</a></div></nav>
       <section className="hero shell" id="top">
         <div className="eyebrow"><span /> Inter-RC Halloween Night 2026</div><h1>Six houses.<br /><em>One haunted night.</em></h1>
         <p>Pick your haunted house, join the queue, and keep your place while you explore the night.</p>
@@ -65,7 +65,7 @@ export default function HomeClient() {
         <div className="house-grid">{houses.map((house, index) => (
           <a className={`house-card ${house.status !== 'open' ? 'house-disabled' : ''}`} href={house.status === 'open' ? `/join/${house.code.toLowerCase()}` : undefined} key={house.code} style={{'--accent': house.accent} as React.CSSProperties} aria-disabled={house.status !== 'open'}>
             <div className="card-top"><span className="house-index">0{index + 1}</span><span className={`open-pill status-${house.status}`}><i /> {house.status}</span></div>
-            <div><h3>{house.name}</h3><p>Haunted House</p></div>
+            <div className="house-identity"><span className="house-rc">{house.name}</span><h3>{house.title}</h3><p className="house-location"><span aria-hidden="true">⌖</span>{house.location}</p></div>
             <div className="card-bottom"><span>{house.waitingCount === 0 ? <b>No wait</b> : house.isDelayed ? <b>Delayed</b> : <>About <b>{house.estimatedMinutes}</b> min wait</>}</span><span>{house.waitingCount} {house.waitingCount === 1 ? 'group' : 'groups'} waiting</span><strong>↗</strong></div>
           </a>
         ))}</div>

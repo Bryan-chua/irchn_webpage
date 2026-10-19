@@ -2,6 +2,7 @@ import { env } from 'cloudflare:workers';
 import { isHouseCode, type HouseCode } from './houses';
 
 const COOKIE_NAME = 'nof_moderator';
+const SESSION_MAX_AGE_SECONDS = 12 * 60 * 60;
 export const OVERALL_MODERATOR = 'OVERALL' as const;
 export type ModeratorScope = HouseCode | typeof OVERALL_MODERATOR;
 
@@ -24,9 +25,19 @@ function isModeratorScope(value: string): value is ModeratorScope {
   return value === OVERALL_MODERATOR || isHouseCode(value);
 }
 
-async function tokenFor(scope: ModeratorScope) {
+function sessionSecret() {
   const secret = runtimeValue('MODERATOR_SESSION_SECRET') || (process.env.NODE_ENV === 'production' ? '' : 'local-fright-night-session');
-  return digest(`${scope}:${secret}`);
+  if (!secret) throw new Error('MODERATOR_SESSION_SECRET is required for moderator sessions.');
+  return secret;
+}
+
+async function sessionKey() {
+  return crypto.subtle.importKey('raw', new TextEncoder().encode(sessionSecret()), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign', 'verify']);
+}
+
+function hexBytes(value: string) {
+  if (!/^[0-9a-f]{64}$/.test(value)) return null;
+  return Uint8Array.from(value.match(/.{2}/g) || [], (part) => Number.parseInt(part, 16));
 }
 
 export async function verifyPin(houseCode: HouseCode, pin: string) {
@@ -44,18 +55,27 @@ export async function verifyOverallPin(pin: string) {
 }
 
 export async function sessionCookie(scope: ModeratorScope) {
-  const token = await tokenFor(scope);
+  const expiresAt = Date.now() + SESSION_MAX_AGE_SECONDS * 1000;
+  const signature = await crypto.subtle.sign('HMAC', await sessionKey(), new TextEncoder().encode(`${scope}:${expiresAt}`));
+  const token = Array.from(new Uint8Array(signature), (byte) => byte.toString(16).padStart(2, '0')).join('');
   const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
-  return `${COOKIE_NAME}=${scope}.${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=43200${secure}`;
+  return `${COOKIE_NAME}=${scope}.${expiresAt}.${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${SESSION_MAX_AGE_SECONDS}${secure}`;
 }
 
 export async function moderatorScope(request: Request): Promise<ModeratorScope | null> {
   const cookie = request.headers.get('cookie') || '';
   const raw = cookie.split(';').map((part) => part.trim()).find((part) => part.startsWith(`${COOKIE_NAME}=`))?.slice(COOKIE_NAME.length + 1);
   if (!raw) return null;
-  const [scope, token] = raw.split('.');
-  if (!isModeratorScope(scope) || !token) return null;
-  return token === await tokenFor(scope) ? scope : null;
+  const [scope, expiresText, token, extra] = raw.split('.');
+  const expiresAt = Number(expiresText);
+  const signature = hexBytes(token || '');
+  if (!isModeratorScope(scope) || extra !== undefined || !Number.isSafeInteger(expiresAt) || expiresAt <= Date.now() || !signature) return null;
+  try {
+    const valid = await crypto.subtle.verify('HMAC', await sessionKey(), signature, new TextEncoder().encode(`${scope}:${expiresAt}`));
+    return valid ? scope : null;
+  } catch {
+    return null;
+  }
 }
 
 export async function moderatorHouse(request: Request): Promise<HouseCode | null> {
