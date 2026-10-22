@@ -1,5 +1,5 @@
 export const HOUSES = [
-  { name: 'RVRC', code: 'RV', title: 'Haunted Theatre', location: 'The Hub @ Block C, E', accent: '#ff7a32' },
+  { name: 'RVRC', code: 'RV', title: 'Haunted Theatre', location: 'The Hub @ Block E', accent: '#ff7a32' },
   { name: 'CAPT', code: 'CP', title: 'Abandoned Museum', location: 'MPSH @ L1', accent: '#c98cff' },
   { name: 'Acacia', code: 'AC', title: 'Abandoned Laboratory', location: 'Learn Lobe', accent: '#63d6a2' },
   { name: 'Tembusu', code: 'TM', title: 'Haunted Hospital', location: 'Seminar Rooms 4-6 @ B1', accent: '#ffcf5a' },
