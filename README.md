@@ -4,16 +4,6 @@ A mobile-first virtual queue for **Inter-RC Halloween Night 2026**, covering six
 
 **Live site:** [irchn-queue.rvrc.workers.dev](https://irchn-queue.rvrc.workers.dev/)
 
-# Moderator Pin (For testing only)
-
-RV:135791
-CAPT:135792
-ACACIA:135793
-TEMBUSU:135794
-RC4:135795
-NUSC:135796
-Bryan:040504
-
 ## Features
 
 ### Participant experience
