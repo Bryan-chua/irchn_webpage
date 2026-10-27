@@ -80,6 +80,17 @@ The group moves out of **Current queue** and into **Entered history**. Its parti
 
 You may select multiple rows and mark them as entered together, but only do this when every selected group has actually been admitted. Use **Select all** only when the same action genuinely applies to every visible waiting and skipped row.
 
+## Fast pass rules
+
+**Eligibility:** All individuals helping out at the event, including committee members.
+
+**Fast pass entry:**
+
+1. Each fast pass entitles the holder to priority entry at two RC haunted houses, excluding the haunted house of their own RC.
+2. Fast passes are for individual use only and may not be used to admit friends or accompanying individuals.
+3. Fast pass holders will be admitted at a ratio of **one fast pass group to every four regular groups**, rather than being given immediate entry.
+4. Where possible, fast pass holders should be placed into regular groups that have not reached full capacity.
+
 ## 5. Skip an unavailable group
 
 If a group is not present when it needs to be admitted:

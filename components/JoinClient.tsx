@@ -3,16 +3,18 @@
 /* eslint-disable @next/next/no-html-link-for-pages, @next/next/no-location-assign-relative-destination -- Navigation intentionally uses full page loads for reliable mobile access. */
 
 import { FormEvent, useEffect, useRef, useState } from 'react';
-import { HOUSE_BY_CODE, MAX_GROUP_SIZE, type HouseCode } from '@/lib/houses';
+import { HOUSE_BY_CODE, MIN_GROUP_SIZE, MAX_GROUP_SIZE, type HouseCode } from '@/lib/houses';
 import { minutesPerGroup } from '@/lib/queue';
 
 const DEVICE_TOKEN_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export default function JoinClient({ houseCode }: { houseCode: HouseCode }) {
   const house = HOUSE_BY_CODE[houseCode];
+  const minGroupSize = MIN_GROUP_SIZE[houseCode];
   const maxGroupSize = MAX_GROUP_SIZE[houseCode];
+  const groupSizeOptions = Array.from({ length: maxGroupSize - minGroupSize + 1 }, (_, index) => index + minGroupSize);
   const [nickname, setNickname] = useState('');
-  const [groupSize, setGroupSize] = useState(2);
+  const [groupSize, setGroupSize] = useState(Math.max(2, minGroupSize));
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [checkingExisting, setCheckingExisting] = useState(true);
@@ -105,8 +107,8 @@ export default function JoinClient({ houseCode }: { houseCode: HouseCode }) {
         <label htmlFor="nickname">Team nickname</label>
         <input id="nickname" value={nickname} onChange={(event) => setNickname(event.target.value)} minLength={2} maxLength={30} placeholder="E.g. Spooky Bananas" autoComplete="off" enterKeyHint="done" required />
         <small>Use something your group remembers. Do not enter real names or personal information.</small>
-        <label>Number of people</label>
-        <div className={`pax-grid${maxGroupSize === 5 ? ' pax-grid-five' : ''}`}>{Array.from({ length: maxGroupSize }, (_, index) => index + 1).map((size) => <button type="button" className={groupSize === size ? 'selected' : ''} aria-pressed={groupSize === size} aria-label={`${size} ${size === 1 ? 'person' : 'people'}`} onClick={() => setGroupSize(size)} key={size}>{size}</button>)}</div>
+        <label>Number of people{minGroupSize > 1 ? ` (${minGroupSize}–${maxGroupSize})` : ''}</label>
+        <div className={`pax-grid${groupSizeOptions.length === 5 ? ' pax-grid-five' : ''}`}>{groupSizeOptions.map((size) => <button type="button" className={groupSize === size ? 'selected' : ''} aria-pressed={groupSize === size} aria-label={`${size} ${size === 1 ? 'person' : 'people'}`} onClick={() => setGroupSize(size)} key={size}>{size}</button>)}</div>
         {error && <p className="form-error" role="alert">{error}</p>}
         <button className="submit-button" disabled={loading || checkingExisting}>{checkingExisting ? 'Checking existing tickets…' : loading ? 'Joining queue…' : `Join ${house.name} queue`} <span>→</span></button>
         <p className="privacy-note">Your nickname is only shown to your station master for verification and is not displayed publicly.</p>

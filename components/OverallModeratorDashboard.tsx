@@ -4,6 +4,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { HouseCode } from '@/lib/houses';
+import AnnouncementControl from './AnnouncementControl';
 
 type HouseOverview = {
   name: string;
@@ -149,6 +150,8 @@ export default function OverallModeratorDashboard() {
         </div>
         <div className="closing-time-control"><label htmlFor="event-closing-time">EVENT CLOSING TIME</label><div><input id="event-closing-time" type="datetime-local" value={closingTime} onChange={(event) => { closingTimeDirty.current = true; setClosingTime(event.target.value); }} /><button disabled={Boolean(pending)} onClick={() => void saveClosingTime()}>Save</button></div></div>
       </section>
+
+      <AnnouncementControl />
 
       <section className="overall-stats"><div><small>WAITING GROUPS</small><strong>{totalWaiting}</strong></div><div><small>PARTICIPANTS ENTERED</small><strong>{totalEntered}</strong></div><div><small>ACTIVE ALERTS</small><strong>{activeAlerts.length}</strong></div></section>
 

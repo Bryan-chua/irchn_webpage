@@ -4,7 +4,7 @@ This guide explains how participants use the **Abandoned Institutions Queue Syst
 
 ## Before joining a queue
 
-- One queue ticket covers one group of **1 to 8 people**, or **1 to 5 people for RC4**.
+- One queue ticket covers one group of **1 to 8 people**, **4 to 8 people for Tembusu**, or **1 to 5 people for RC4**.
 - You can hold an active ticket for more than one haunted house.
 - You can hold only one active ticket for the same haunted house in the same browser. If you try again, the website returns you to your existing ticket.
 - Choose a team nickname that everyone in your group will remember.
@@ -12,6 +12,12 @@ This guide explains how participants use the **Abandoned Institutions Queue Syst
 - Keep this safe word in mind: **Pineapple**. Say it at any time inside a haunted house if you need the experience to stop. Staff will assist you and guide you out.
 
 ## 1. Choose a haunted house
+
+On your first visit to the homepage, the participant-guide tip appears first. Dismiss it with **Got it**, or select **Open guide** and close the guide when you finish reading. Any unread event announcement will then appear.
+
+If an event announcement appears when you open a page, read it and select **Got it** to dismiss it. The same announcement stays dismissed in this browser; a new announcement will appear again. Announcements may reappear if browser storage is cleared or unavailable.
+
+New announcements also appear while you are on the website, usually within 10 seconds when the tab is visible and connected. If you are reading the participant guide, the announcement waits until you close it. Returning to the tab checks for updates immediately.
 
 1. Open the event website: [irchn-queue.rvrc.workers.dev](https://irchn-queue.rvrc.workers.dev/).
 2. Scroll to **Live queues**.
@@ -26,7 +32,7 @@ You cannot join a paused or closed queue. If you already have a ticket, it remai
 ## 2. Join the queue
 
 1. Enter a team nickname between **2 and 30 characters**.
-2. Select the number of people in your group, from **1 to 8** (**1 to 5 for RC4**).
+2. Select the number of people in your group, from **1 to 8** (**4 to 8 for Tembusu**, **1 to 5 for RC4**).
 3. Select **Join _[house name]_ queue**.
 4. Wait for the ticket page to appear. Avoid pressing the join button repeatedly while the request is processing.
 

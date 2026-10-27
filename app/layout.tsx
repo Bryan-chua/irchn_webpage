@@ -1,5 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
+import AnnouncementPopup from '@/components/AnnouncementPopup';
+import ParticipantPopupProvider from '@/components/ParticipantPopupProvider';
 
 export const viewport: Viewport = {
   width: 'device-width',
@@ -27,5 +29,5 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="en"><body>{children}</body></html>;
+  return <html lang="en"><body><ParticipantPopupProvider>{children}<AnnouncementPopup /></ParticipantPopupProvider></body></html>;
 }

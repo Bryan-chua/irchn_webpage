@@ -4,7 +4,7 @@ A mobile-first virtual queue for **Inter-RC Halloween Night 2026**, covering six
 
 **Live site:** [irchn-queue.rvrc.workers.dev](https://irchn-queue.rvrc.workers.dev/)
 
-# Moderator Pin
+# Moderator Pin (For testing only)
 
 RV:135791
 CAPT:135792
@@ -20,7 +20,7 @@ Bryan:040504
 
 - View all six haunted houses from one mobile-friendly home page.
 - See each house's live queue status, number of waiting groups, and estimated wait time.
-- Join any open queue with a memorable team nickname and a group size of 1–8 people, or 1–5 people for RC4.
+- Join any open queue with a memorable team nickname and a group size of 1–8 people, 4–8 people for Tembusu, or 1–5 people for RC4.
 - Receive a unique queue number, such as `RV-0420`, for the whole group.
 - See a live ticket with the house, queue number, group size, groups ahead, estimated wait, and ticket status.
 - Automatically refresh house summaries and live tickets, with slower or stopped polling after a ticket leaves the waiting queue.
@@ -54,6 +54,8 @@ Team nicknames are visible only to the participant who just joined and the stati
 ### Overall moderator experience
 
 - Sign in through **Bryan — Overall control** with a separate overall-moderator PIN.
+- Publish or remove a participant announcement popup. Publishing replaces the active announcement; each new announcement is shown once per browser after dismissal.
+- Open participant pages check for announcements every 10 seconds while visible, with retries backing off to 60 seconds on failure. Returning to a tab or reconnecting triggers an immediate check. On the homepage, the first-visit info tip and participant guide take priority.
 - Open and unlock all houses, or pause/close all houses while locking station status controls.
 - Control individual house statuses while the event is unlocked.
 - Compare house status, estimated clear time, delays, skipped groups, station activity, and capacity against an editable event closing time.
@@ -75,7 +77,7 @@ Team nicknames are visible only to the participant who just joined and the stati
 
 ## Event rules and queue behaviour
 
-- One ticket represents one group of 1–8 participants, except RC4, which allows 1–5 participants.
+- One ticket represents one group of 1–8 participants, except Tembusu, which allows 4–8 participants, and RC4, which allows 1–5 participants.
 - A participant may hold one active ticket for each haunted house at the same time.
 - Per-group estimates are configured by house in `lib/queue.ts`.
 - A ticket's estimated wait is based on its waiting groups ahead and the house's configured duration.

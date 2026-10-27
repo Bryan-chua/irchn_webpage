@@ -71,3 +71,11 @@ export const operationalEvents = sqliteTable('operational_events', {
     .on(table.eventType, table.houseCode)
     .where(sql`${table.category} = 'alert' AND ${table.resolvedAt} IS NULL`),
 ]);
+
+export const announcement = sqliteTable('announcement', {
+  id: integer('id').primaryKey(),
+  version: text('version').notNull(),
+  title: text('title').notNull(),
+  message: text('message').notNull(),
+  publishedAt: integer('published_at').notNull(),
+});

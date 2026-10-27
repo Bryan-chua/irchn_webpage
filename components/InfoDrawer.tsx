@@ -1,6 +1,7 @@
 'use client';
 
 import { Fragment, type ReactNode, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useParticipantPopups } from './ParticipantPopupProvider';
 
 type InfoDrawerProps = {
   label: string;
@@ -103,6 +104,8 @@ function MarkdownContent({ markdown, idPrefix }: { markdown: string; idPrefix: s
 export default function InfoDrawer({ label, markdown, title, variant = 'site', firstVisitTip = false }: InfoDrawerProps) {
   const [open, setOpen] = useState(false);
   const [showFirstVisitTip, setShowFirstVisitTip] = useState(false);
+  const [firstVisitChecked, setFirstVisitChecked] = useState(false);
+  const { setGuideIsBlocking } = useParticipantPopups();
   const reactId = useId().replace(/:/g, '');
   const titleId = `info-title-${reactId}`;
   const idPrefix = `info-${reactId}`;
@@ -116,12 +119,24 @@ export default function InfoDrawer({ label, markdown, title, variant = 'site', f
 
   useEffect(() => {
     if (!firstVisitTip) return;
+    let seen = false;
     try {
-      if (localStorage.getItem(FIRST_VISIT_TIP_KEY)) return;
+      seen = Boolean(localStorage.getItem(FIRST_VISIT_TIP_KEY));
     } catch { /* The tip can still appear when storage is unavailable. */ }
-    const timer = setTimeout(() => setShowFirstVisitTip(true), 0);
+    const timer = setTimeout(() => {
+      setShowFirstVisitTip(!seen);
+      setFirstVisitChecked(true);
+    }, 0);
     return () => clearTimeout(timer);
   }, [firstVisitTip]);
+
+  useEffect(() => {
+    if (firstVisitTip) setGuideIsBlocking(!firstVisitChecked || showFirstVisitTip || open);
+  }, [firstVisitTip, firstVisitChecked, showFirstVisitTip, open, setGuideIsBlocking]);
+
+  useEffect(() => {
+    if (firstVisitTip) return () => setGuideIsBlocking(true);
+  }, [firstVisitTip, setGuideIsBlocking]);
 
   function dismissFirstVisitTip() {
     setShowFirstVisitTip(false);
