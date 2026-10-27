@@ -7,13 +7,14 @@ export async function GET(request: Request) {
   if (!houseCode) return Response.json({ error: 'Authorisation required.' }, { status: 401 });
   const db = getDb();
   try {
+    // Ticket positions use insertion IDs; concurrent requests can have out-of-order timestamps.
     const [setting, eventSetting, active, history] = await Promise.all([
     db.prepare('SELECT status, last_entered_at AS lastEnteredAt FROM house_settings WHERE house_code = ?').bind(houseCode).first<{ status: string; lastEnteredAt: number | null }>(),
     db.prepare('SELECT status, station_controls_locked AS stationControlsLocked FROM event_settings WHERE id = 1').first<{ status: string; stationControlsLocked: number }>(),
     db.prepare(`SELECT id, queue_number AS queueNumber, nickname, group_size AS groupSize,
       status, joined_at AS joinedAt FROM queue_entries
       WHERE house_code = ? AND status IN ('waiting', 'skipped')
-      ORDER BY CASE status WHEN 'waiting' THEN 0 ELSE 1 END, joined_at ASC, id ASC`).bind(houseCode).all(),
+      ORDER BY CASE status WHEN 'waiting' THEN 0 ELSE 1 END, id ASC`).bind(houseCode).all(),
     db.prepare(`SELECT id, queue_number AS queueNumber, nickname, group_size AS groupSize,
       status, joined_at AS joinedAt, completed_at AS completedAt FROM queue_entries
       WHERE house_code = ? AND status IN ('entered', 'cancelled')

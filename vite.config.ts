@@ -17,6 +17,7 @@ const isCodexSeatbeltSandbox = process.env.CODEX_SANDBOX === 'seatbelt';
 const localBindingConfig = {
   name: 'irchn-queue',
   main: 'vinext/server/app-router-entry',
+  compatibility_date: '2026-10-06',
   compatibility_flags: ['nodejs_compat'],
   d1_databases: d1
     ? [

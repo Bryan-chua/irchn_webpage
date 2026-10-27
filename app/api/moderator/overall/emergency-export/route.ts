@@ -37,7 +37,7 @@ export async function GET(request: Request) {
       ORDER BY CASE house_code
         WHEN 'RV' THEN 1 WHEN 'CP' THEN 2 WHEN 'AC' THEN 3
         WHEN 'TM' THEN 4 WHEN 'R4' THEN 5 WHEN 'NS' THEN 6 ELSE 7 END,
-        CASE status WHEN 'waiting' THEN 0 ELSE 1 END, joined_at ASC, id ASC`).all<ActiveQueueRow>();
+        CASE status WHEN 'waiting' THEN 0 ELSE 1 END, id ASC`).all<ActiveQueueRow>();
     const exportedAt = Date.now();
     const orderByHouse = new Map<HouseCode, number>();
     const header = ['house', 'queue_order', 'queue_number', 'team_nickname', 'pax', 'status', 'joined_at', 'exported_at', 'entered', 'skipped', 'processed_at', 'notes'];

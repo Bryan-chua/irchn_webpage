@@ -37,16 +37,18 @@ export default function QueueStatusClient({ queueNumber }: { queueNumber: string
     let timer: ReturnType<typeof setTimeout>;
     let failures = 0;
     let hasTicket = false;
-    let terminalStatus = false;
+    let inFlight = false;
     let refreshMs = DEFAULT_REFRESH_MS;
     const refresh = async () => {
+      if (stopped || inFlight || document.hidden) return;
+      inFlight = true;
+      clearTimeout(timer);
       try {
         const response = await fetch(`/api/queues/${encodeURIComponent(queueNumber)}`);
         const data = await response.json() as TicketResponse;
         if (!response.ok || !data.ticket) throw new Error(data.error || 'Unable to load this queue.');
         hasTicket = true;
         if (!stopped) { setTicket(data.ticket); setError(''); setConnectionIssue(null); setLastUpdatedAt(Date.now()); }
-        terminalStatus = data.ticket.status === 'entered' || data.ticket.status === 'cancelled';
         refreshMs = data.ticket.status === 'skipped'
           ? SKIPPED_REFRESH_MS
           : data.ticket.status === 'waiting' && data.ticket.groupsAhead <= 5
@@ -58,18 +60,22 @@ export default function QueueStatusClient({ queueNumber }: { queueNumber: string
         if (!stopped && !hasTicket) setError(reason instanceof Error ? reason.message : 'Unable to load this queue.');
         if (!stopped && hasTicket && (!navigator.onLine || failures >= 2)) setConnectionIssue(navigator.onLine ? 'stale' : 'offline');
       } finally {
-        if (!stopped && !terminalStatus) {
+        inFlight = false;
+        if (!stopped && !document.hidden) {
           const backoff = failures === 0 ? refreshMs : Math.min(MAX_RETRY_MS, DEFAULT_REFRESH_MS * (2 ** failures));
           timer = setTimeout(refresh, backoff * (0.8 + Math.random() * 0.4));
         }
       }
     };
     const handleOffline = () => { if (hasTicket) setConnectionIssue('offline'); };
-    const handleOnline = () => { if (hasTicket) { setConnectionIssue('stale'); clearTimeout(timer); void refresh(); } };
+    const handleOnline = () => { if (hasTicket) setConnectionIssue('stale'); void refresh(); };
+    const handleVisible = () => { clearTimeout(timer); if (!document.hidden) void refresh(); };
     window.addEventListener('offline', handleOffline);
     window.addEventListener('online', handleOnline);
+    window.addEventListener('focus', handleVisible);
+    document.addEventListener('visibilitychange', handleVisible);
     void refresh();
-    return () => { stopped = true; clearTimeout(nicknameTimer); clearTimeout(timer); window.removeEventListener('offline', handleOffline); window.removeEventListener('online', handleOnline); };
+    return () => { stopped = true; clearTimeout(nicknameTimer); clearTimeout(timer); window.removeEventListener('offline', handleOffline); window.removeEventListener('online', handleOnline); window.removeEventListener('focus', handleVisible); document.removeEventListener('visibilitychange', handleVisible); };
   }, [queueNumber]);
 
   useEffect(() => {

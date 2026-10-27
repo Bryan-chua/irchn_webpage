@@ -13,7 +13,7 @@ A mobile-first virtual queue for **Inter-RC Halloween Night 2026**, covering six
 - Join any open queue with a memorable team nickname and a group size of 1–8 people, 4–8 people for Tembusu, or 1–5 people for RC4.
 - Receive a unique queue number, such as `RV-0420`, for the whole group.
 - See a live ticket with the house, queue number, group size, groups ahead, estimated wait, and ticket status.
-- Automatically refresh house summaries and live tickets, with slower or stopped polling after a ticket leaves the waiting queue.
+- Automatically refresh house summaries and live tickets, including after entry so a station master's undo appears without reloading. Returning to the ticket tab triggers an immediate refresh.
 - Look up an existing ticket from the home page using its queue number.
 - Receive a reminder to move towards the entrance when five or fewer groups remain.
 - See clear ticket messages when a group is waiting, entered, skipped, or no longer active.
@@ -80,6 +80,7 @@ Team nicknames are visible only to the participant who just joined and the stati
 - Participants should screenshot their ticket immediately after joining.
 - Team nicknames must not include real names, phone numbers, email addresses, or other personal information.
 - Skipped groups do not count towards queue positions or estimated waits. They remain visible to station masters for manual handling.
+- Queue order follows the database ticket sequence, not request timestamps, so simultaneous joins have the same order on participant tickets, station dashboards, and emergency backups. Undo restores a ticket to its original position.
 
 Queue numbers and a random anonymous device token are saved in local browser storage. The server stores only a one-way hash of the token and uses it to prevent the same browser from holding multiple active tickets for one house. The database remains the source of truth, and the nickname is kept only in session storage for display on the browser that created the ticket.
 
@@ -137,6 +138,7 @@ When moderator settings are absent in local development, every station uses `boo
 | `npm run build` | Create the production build. |
 | `npm run start` | Run the built application locally. |
 | `npm run lint` | Run ESLint. |
+| `npm run test:regression` | Check queue ordering, backups, undo refresh, and tab/reconnect polling against local fixtures. |
 | `npm run db:generate` | Generate Drizzle migrations from the schema. |
 | `npm run deploy` | Build and deploy the Cloudflare Worker. |
 
