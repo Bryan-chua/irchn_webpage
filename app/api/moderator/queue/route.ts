@@ -1,3 +1,4 @@
+import { clearOutsideRcTickets, getQueueDb } from '@/lib/rc-policy';
 import { getDb, temporarilyUnavailable } from '@/lib/db';
 import { moderatorHouse } from '@/lib/moderator-auth';
 import { recordActivity, recordStationPresence, recordSiteError } from '@/lib/operations';
@@ -5,8 +6,8 @@ import { recordActivity, recordStationPresence, recordSiteError } from '@/lib/op
 export async function GET(request: Request) {
   const houseCode = await moderatorHouse(request);
   if (!houseCode) return Response.json({ error: 'Authorisation required.' }, { status: 401 });
-  const db = getDb();
   try {
+    const db = await getQueueDb();
     // Ticket positions use insertion IDs; concurrent requests can have out-of-order timestamps.
     const [setting, eventSetting, active, history] = await Promise.all([
     db.prepare('SELECT status, last_entered_at AS lastEnteredAt FROM house_settings WHERE house_code = ?').bind(houseCode).first<{ status: string; lastEnteredAt: number | null }>(),
@@ -50,7 +51,10 @@ export async function PATCH(request: Request) {
     }
   }
 
-  const ids = Array.isArray(body?.ids) ? body.ids.filter(Number.isInteger).slice(0, 100) : [];
+  if (Array.isArray(body?.ids) && body.ids.length > 100) {
+    return Response.json({ error: 'Process at most 100 queue entries per request.' }, { status: 400 });
+  }
+  const ids = Array.isArray(body?.ids) ? body.ids.filter(Number.isInteger) : [];
   const status = body?.status;
   if (!ids.length || !status || !['waiting', 'entered', 'skipped', 'cancelled'].includes(status)) {
     return Response.json({ error: 'Choose at least one valid queue entry and action.' }, { status: 400 });
@@ -71,12 +75,14 @@ export async function PATCH(request: Request) {
     ) WHERE house_code = ?`).bind(houseCode, houseCode));
   }
   try {
+    await clearOutsideRcTickets(db);
     const results = await db.batch(statements);
     if (results.slice(0, ids.length).every((result) => !result.meta.changes)) {
       return Response.json({ error: 'These groups have already changed status. Refresh the queue and try again.' }, { status: 409 });
     }
     return Response.json({ ok: true });
   } catch (error) {
+    if (String(error).includes('rc_cutoff')) return Response.json({ error: 'The home-RC-only cutoff has passed. Refresh the queue; outside-RC tickets cannot be restored or admitted.' }, { status: 409 });
     if (status === 'waiting' && String(error).includes('UNIQUE constraint failed')) {
       return Response.json({ error: 'This group cannot be restored because the same browser already has another active ticket for this house.' }, { status: 409 });
     }

@@ -1,4 +1,5 @@
-import { cleanQueueNumber, getDb, publicQueue, temporarilyUnavailable } from '@/lib/db';
+import { getQueueDb } from '@/lib/rc-policy';
+import { cleanQueueNumber, publicQueue, temporarilyUnavailable } from '@/lib/db';
 import { recordSiteError } from '@/lib/operations';
 
 type QueueRow = Record<string, unknown> & {
@@ -12,7 +13,7 @@ export async function GET(_request: Request, context: { params: Promise<{ queueN
   const queueNumber = cleanQueueNumber(decodeURIComponent(raw));
 
   try {
-    const db = getDb();
+    const db = await getQueueDb();
     const entry = await db.prepare(`SELECT q.*, hs.last_entered_at,
       CASE WHEN q.status = 'waiting' THEN (
         SELECT COUNT(*) FROM queue_entries ahead

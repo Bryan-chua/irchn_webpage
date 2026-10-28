@@ -9,6 +9,7 @@ A mobile-first virtual queue for **Inter-RC Halloween Night 2026**, covering six
 ### Participant experience
 
 - View all six haunted houses from one mobile-friendly home page.
+- Select a home RC in a popup after the first-visit guide and before announcements. The choice is remembered in the browser and tied to the anonymous device token on the server.
 - See each house's live queue status, number of waiting groups, and estimated wait time.
 - Join any open queue with a memorable team nickname and a group size of 1–8 people, 4–8 people for Tembusu, or 1–5 people for RC4.
 - Receive a unique queue number, such as `RV-0420`, for the whole group.
@@ -48,10 +49,12 @@ Team nicknames are visible only to the participant who just joined and the stati
 - Open participant pages check for announcements every 10 seconds while visible, with retries backing off to 60 seconds on failure. Returning to a tab or reconnecting triggers an immediate check. On the homepage, the first-visit info tip and participant guide take priority.
 - Open and unlock all houses, or pause/close all houses while locking station status controls.
 - Control individual house statuses while the event is unlocked.
+- Set or clear a separate **Home RC only** cutoff in Singapore time. At the cutoff, outside-RC waiting and skipped tickets (including tickets without a selected RC) are cancelled, and new outside-RC joins are blocked. Own-RC tickets remain valid. Clearing or postponing the cutoff does not restore cancelled tickets.
 - Compare house status, estimated clear time, delays, skipped groups, station activity, and capacity against an editable event closing time.
 - Review and acknowledge persistent operational alerts without deleting their history.
 - Review an audit log of global and station status changes and security warnings.
-- Export an anonymous CSV containing entered-participant totals per haunted house and recorded site issues.
+- View estimated participants and total haunted-house admissions by home RC in the overall dashboard.
+- Export an anonymous CSV containing entered-participant totals per haunted house, home-RC statistics, and recorded site issues.
 - Download a separate all-house emergency CSV containing every current waiting and skipped group.
 
 ### Operational and privacy features
@@ -82,7 +85,15 @@ Team nicknames are visible only to the participant who just joined and the stati
 - Skipped groups do not count towards queue positions or estimated waits. They remain visible to station masters for manual handling.
 - Queue order follows the database ticket sequence, not request timestamps, so simultaneous joins have the same order on participant tickets, station dashboards, and emergency backups. Undo restores a ticket to its original position.
 
-Queue numbers and a random anonymous device token are saved in local browser storage. The server stores only a one-way hash of the token and uses it to prevent the same browser from holding multiple active tickets for one house. The database remains the source of truth, and the nickname is kept only in session storage for display on the browser that created the ticket.
+Queue numbers, the selected home RC, and a random anonymous device token are saved in local browser storage. The first confirmed RC is also stored against the hashed device token on the server and cannot be changed on that browser. This is a self-declared RC, not proof of residency; clearing browser storage or using another device creates a new anonymous identity. The server stores only a one-way hash of the token and uses it to prevent the same browser from holding multiple active tickets for one house. The database remains the source of truth, and the nickname is kept only in session storage for display on the browser that created the ticket.
+
+The home-RC-only cutoff is enforced on the server and by database write guards, including station attempts to restore or admit an ineligible ticket. Queue requests cancel expired tickets before reading positions, station queues, or emergency backups; existing participant and dashboard polling performs this automatically without the overall dashboard staying open. With no traffic, cancellation is applied on the next queue request. Older tickets can acquire the browser’s selected RC before the cutoff. Cancelled ticket pages explain the cutoff reason.
+
+### Home-RC event statistics
+
+Everyone on a ticket is assumed to belong to its selected home RC. **Estimated participants** counts each anonymous browser’s group once across all houses, using the largest group size recorded on any of its tickets. Waiting, skipped, entered and cancelled tickets all contribute to this registration estimate. **Haunted-house admissions** sums group sizes on currently entered tickets; each visit counts again, and Undo removes that visit from admissions. RC selection alone does not count until a ticket is issued.
+
+These are group-based estimates, not verified individual attendance. Changing browsers or clearing browser storage can count a group again; changing group membership cannot be tracked. Legacy tickets without a device token count separately, and tickets without a valid RC appear under **Unknown RC**. Dashboard and event CSV use the same calculation. CSV rows with `record_type=home_rc_summary` populate `home_rc`, `estimated_participants` and `haunted_house_admissions`; existing house-summary and site-issue rows remain available. Export the report before deleting ticket records, because the statistics are derived from those records.
 
 ## Status reference
 
@@ -138,7 +149,7 @@ When moderator settings are absent in local development, every station uses `boo
 | `npm run build` | Create the production build. |
 | `npm run start` | Run the built application locally. |
 | `npm run lint` | Run ESLint. |
-| `npm run test:regression` | Check queue ordering, backups, undo refresh, and tab/reconnect polling against local fixtures. |
+| `npm run test:regression` | Check queue ordering, backups, undo refresh, polling, RC persistence and cutoff enforcement against local fixtures. |
 | `npm run db:generate` | Generate Drizzle migrations from the schema. |
 | `npm run deploy` | Build and deploy the Cloudflare Worker. |
 
@@ -194,7 +205,7 @@ Completed records are retained temporarily for operational history. Organisers s
 
 - Set six unique station access codes, a separate overall-moderator PIN, and a strong session secret.
 - Confirm each house's configured time per group in `MINUTES_PER_GROUP`.
-- Sign in as Bryan, set the event closing time, then use **Close all & lock** until the activity is ready to begin.
+- Sign in as Bryan, set the event closing time and optional home-RC-only cutoff (Singapore time), then use **Close all & lock** until the activity is ready to begin.
 - Have every station load its dashboard and download or print an initial emergency queue backup; refresh the download periodically during the event.
 - Decide how long skipped groups may return and whether they retain their original position.
 - Test participant joining, ticket lookup, and all six station logins on the devices that will be used.

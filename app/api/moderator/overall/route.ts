@@ -1,8 +1,10 @@
-import { getDb, temporarilyUnavailable } from '@/lib/db';
+import { clearOutsideRcTickets, getQueueDb } from '@/lib/rc-policy';
+import { temporarilyUnavailable } from '@/lib/db';
 import { HOUSES, isHouseCode, type HouseCode } from '@/lib/houses';
 import { isOverallModerator } from '@/lib/moderator-auth';
 import { raiseAlert, recordActivity, recordSiteError, resolveAlert } from '@/lib/operations';
 import { estimatedClearSeconds } from '@/lib/queue';
+import { getHomeRcStats } from '@/lib/participant-stats';
 
 type HouseRow = {
   house_code: HouseCode;
@@ -19,6 +21,7 @@ type EventSetting = {
   status: string;
   stationControlsLocked: number;
   eventEndAt: number | null;
+  homeRcOnlyAt: number | null;
   updatedAt: number;
   updatedBy: string;
 };
@@ -38,11 +41,11 @@ async function syncConditionAlert(active: boolean, details: Parameters<typeof ra
 
 export async function GET(request: Request) {
   if (!await isOverallModerator(request)) return Response.json({ error: 'Overall moderator access required.' }, { status: 401 });
-  const db = getDb();
   try {
-    const [setting, rows, presenceRows, activeAlertRows] = await Promise.all([
+    const db = await getQueueDb();
+    const [setting, rows, presenceRows, activeAlertRows, homeRcStats] = await Promise.all([
       db.prepare(`SELECT status, station_controls_locked AS stationControlsLocked,
-        event_end_at AS eventEndAt, updated_at AS updatedAt, updated_by AS updatedBy
+        event_end_at AS eventEndAt, home_rc_only_at AS homeRcOnlyAt, updated_at AS updatedAt, updated_by AS updatedBy
         FROM event_settings WHERE id = 1`).first<EventSetting>(),
       db.prepare(`SELECT hs.house_code, hs.status, hs.last_entered_at,
         SUM(CASE WHEN q.status = 'waiting' THEN 1 ELSE 0 END) AS waiting_count,
@@ -58,9 +61,10 @@ export async function GET(request: Request) {
       db.prepare(`SELECT event_type AS eventType, house_code AS houseCode FROM operational_events
         WHERE category = 'alert' AND resolved_at IS NULL
           AND event_type IN ('queue_significantly_delayed', 'skipped_groups_high')`).all<ActiveAlertRow>(),
+      getHomeRcStats(db),
     ]);
     const now = Date.now();
-    const currentSetting = setting || { status: 'open', stationControlsLocked: 0, eventEndAt: null, updatedAt: 0, updatedBy: 'system' };
+    const currentSetting = setting || { status: 'open', stationControlsLocked: 0, eventEndAt: null, homeRcOnlyAt: null, updatedAt: 0, updatedBy: 'system' };
     const rowByCode = new Map(rows.results.map((row) => [row.house_code, row]));
     const presenceByCode = new Map(presenceRows.results.map((presence) => [presence.houseCode, presence]));
     const activeConditionAlerts = new Set(activeAlertRows.results.map((alert) => `${alert.eventType}:${alert.houseCode}`));
@@ -115,10 +119,12 @@ export async function GET(request: Request) {
         status: currentSetting.status,
         stationControlsLocked: Boolean(currentSetting.stationControlsLocked),
         eventEndAt: currentSetting.eventEndAt,
+        homeRcOnlyAt: currentSetting.homeRcOnlyAt,
         updatedAt: currentSetting.updatedAt,
         updatedBy: currentSetting.updatedBy,
       },
       houses,
+      homeRcStats,
       events: events.results,
       generatedAt: now,
     }, { headers: { 'Cache-Control': 'no-store' } });
@@ -135,11 +141,12 @@ export async function PATCH(request: Request) {
     houseCode?: string;
     houseStatus?: string;
     eventEndAt?: number | null;
+    homeRcOnlyAt?: number | null;
     acknowledgeEventId?: number;
   } | null;
-  const db = getDb();
   const now = Date.now();
   try {
+    const db = await getQueueDb();
     if (body?.globalStatus) {
       if (!['open', 'paused', 'closed'].includes(body.globalStatus)) return Response.json({ error: 'Invalid global event status.' }, { status: 400 });
       const locked = body.globalStatus !== 'open';
@@ -168,6 +175,19 @@ export async function PATCH(request: Request) {
       if (setting?.station_controls_locked) return Response.json({ error: 'Open and unlock the event before changing an individual house.' }, { status: 423 });
       await db.prepare('UPDATE house_settings SET status = ? WHERE house_code = ?').bind(body.houseStatus, houseCode).run();
       await recordActivity({ eventType: 'house_status_changed', houseCode, actor: 'Bryan', message: `Bryan changed ${houseCode} to ${body.houseStatus}.` }, db);
+      return Response.json({ ok: true });
+    }
+
+    if (Object.prototype.hasOwnProperty.call(body || {}, 'homeRcOnlyAt')) {
+      const cutoff = body?.homeRcOnlyAt;
+      if (cutoff !== null && (typeof cutoff !== 'number' || !Number.isSafeInteger(cutoff) || cutoff <= 0 || cutoff > 8640000000000000)) {
+        return Response.json({ error: 'Choose a valid home-RC-only cutoff time.' }, { status: 400 });
+      }
+      await db.prepare(`INSERT INTO event_settings (id, home_rc_only_at, updated_at, updated_by)
+        VALUES (1, ?, ?, 'Bryan') ON CONFLICT(id) DO UPDATE SET home_rc_only_at = excluded.home_rc_only_at,
+        updated_at = excluded.updated_at, updated_by = excluded.updated_by`).bind(cutoff, now).run();
+      await clearOutsideRcTickets(db);
+      await recordActivity({ eventType: 'rc_cutoff_changed', actor: 'Bryan', message: cutoff ? `Bryan set home-RC-only queues to start at ${new Date(cutoff).toISOString()}.` : 'Bryan disabled the home-RC-only cutoff. Cancelled tickets remain cancelled.' }, db);
       return Response.json({ ok: true });
     }
 

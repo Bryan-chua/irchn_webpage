@@ -4,8 +4,9 @@
 
 import { FormEvent, useEffect, useState } from 'react';
 import InfoDrawer from '@/components/InfoDrawer';
+import { useParticipantPopups } from './ParticipantPopupProvider';
 import participantGuide from '@/docs/participant.md?raw';
-import { HOUSES } from '@/lib/houses';
+import { HOUSES, HOUSE_BY_CODE } from '@/lib/houses';
 
 type HouseSummary = (typeof HOUSES)[number] & { status: string; waitingCount: number; estimatedMinutes: number; isDelayed: boolean };
 type HousesResponse = { houses?: HouseSummary[] };
@@ -14,6 +15,7 @@ const REFRESH_MS = 10_000;
 const MAX_REFRESH_MS = 60_000;
 
 export default function HomeClient() {
+  const { homeRc, homeRcOnlyAt, ownRcOnly } = useParticipantPopups();
   const [houses, setHouses] = useState<HouseSummary[]>(HOUSES.map((house) => ({ ...house, status: 'loading', waitingCount: 0, estimatedMinutes: 0, isDelayed: false })));
   const [queueNumber, setQueueNumber] = useState('');
   const [showSafeWordInfo, setShowSafeWordInfo] = useState(false);
@@ -62,9 +64,10 @@ export default function HomeClient() {
       </section>
       <section className="queue-section" id="houses"><div className="shell">
         <div className="section-heading"><div><div className="eyebrow"><span /> Live queues</div><h2>Where will you enter?</h2></div><p>Wait times update as each group enters.</p></div>
+        {homeRc && <p className="rc-notice">Home RC: <b>{HOUSE_BY_CODE[homeRc].name}</b>. {ownRcOnly ? 'Queues are now open to each RC’s own residents only. Tickets outside your RC have been cancelled.' : homeRcOnlyAt ? `From ${new Date(homeRcOnlyAt).toLocaleString('en-SG', { timeZone: 'Asia/Singapore', dateStyle: 'medium', timeStyle: 'short' })} (SGT), tickets outside your RC will be cancelled and you can only join your own RC’s queue.` : 'Your RC is remembered on this browser.'}</p>}
         <div className="house-grid">{houses.map((house, index) => (
-          <a className={`house-card ${house.status !== 'open' ? 'house-disabled' : ''}`} href={house.status === 'open' ? `/join/${house.code.toLowerCase()}` : undefined} key={house.code} style={{'--accent': house.accent} as React.CSSProperties} aria-disabled={house.status !== 'open'}>
-            <div className="card-top"><span className="house-index">0{index + 1}</span><span className={`open-pill status-${house.status}`}><i /> {house.status}</span></div>
+          <a className={`house-card ${(house.status !== 'open' || (ownRcOnly && house.code !== homeRc)) ? 'house-disabled' : ''}`} href={house.status === 'open' && !(ownRcOnly && house.code !== homeRc) ? `/join/${house.code.toLowerCase()}` : undefined} key={house.code} style={{'--accent': house.accent} as React.CSSProperties} aria-disabled={(house.status !== 'open' || (ownRcOnly && house.code !== homeRc))}>
+            <div className="card-top"><span className="house-index">0{index + 1}</span><span className={`open-pill status-${house.status}`}><i /> {ownRcOnly && house.code !== homeRc ? 'Residents only' : house.status}</span></div>
             <div className="house-identity"><span className="house-rc">{house.name}</span><h3>{house.title}</h3><p className="house-location"><span aria-hidden="true">⌖</span>{house.location}</p></div>
             <div className="card-bottom"><span>{house.waitingCount === 0 ? <b>No wait</b> : house.isDelayed ? <b>Delayed</b> : <>About <b>{house.estimatedMinutes}</b> min wait</>}</span><span>{house.waitingCount} {house.waitingCount === 1 ? 'group' : 'groups'} waiting</span><strong>↗</strong></div>
           </a>

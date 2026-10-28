@@ -376,3 +376,25 @@ footer { min-height:80px; border-top:1px solid var(--line); display:flex; justif
 .announcement-control button:disabled { opacity:.55; cursor:not-allowed; }
 .announcement-form input:focus-visible,.announcement-form textarea:focus-visible,.announcement-control button:focus-visible,.announcement-dialog button:focus-visible { outline:2px solid #a44715; outline-offset:3px; }
 @media (max-width:620px) { .announcement-dialog { padding:24px; }.announcement-control { padding:20px; }.announcement-control .overall-section-title h2 { font-size:34px; } }
+
+.rc-dialog label { display:block; margin:20px 0 8px; font-size:12px; font-weight:800; text-transform:uppercase; }
+.rc-dialog select { width:100%; min-height:48px; padding:12px; background:#fffaf3; color:#1b1815; border:1px solid #8f8174; font-size:16px; }
+.rc-dialog p { font-size:14px; line-height:1.6; }
+.rc-dialog button:disabled { opacity:.5; cursor:not-allowed; }
+.rc-notice { padding:16px; margin:18px 0; border:1px solid #78604d; background:#ff7a3210; font-size:14px; line-height:1.6; }
+.rc-cutoff-control { margin-top:20px; }
+.rc-cutoff-control .closing-time-control > button { margin-top:12px; padding:10px 14px; }
+.rc-dialog p { margin:12px 0; }
+.rc-cutoff-control { grid-template-columns:minmax(0,1fr) minmax(0,1fr); }
+.rc-cutoff-control p { font-size:13px; line-height:1.6; margin-top:10px; }
+.rc-cutoff-control button:disabled { opacity:.5; cursor:not-allowed; }
+@media (max-width:900px) { .rc-cutoff-control { grid-template-columns:1fr; } }
+
+.rc-stats-explanation { color:#686159; font-size:13px; line-height:1.6; margin:14px 0; }
+.rc-stats-table-wrap { overflow-x:auto; }
+.rc-stats-table { width:100%; border-collapse:collapse; background:#f8f4ed; font-size:14px; }
+.rc-stats-table th,.rc-stats-table td { padding:16px 20px; text-align:right; border-bottom:1px solid #ddd5c9; }
+.rc-stats-table th:first-child { text-align:left; }
+.rc-stats-table thead th { background:#dcd4c7; font-size:11px; line-height:1.5; }
+.rc-stats-table tfoot { background:#ece5da; font-weight:800; }
+@media (max-width:620px) { .rc-stats-table th,.rc-stats-table td { padding:12px 10px; }.rc-stats-table { font-size:13px; }#home-rc-stats .overall-section-title { align-items:start; flex-direction:column; } }

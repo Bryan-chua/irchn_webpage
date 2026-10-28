@@ -6,6 +6,8 @@ export const queueEntries = sqliteTable('queue_entries', {
   queueNumber: text('queue_number').notNull().unique(),
   joinKey: text('join_key').unique(),
   deviceTokenHash: text('device_token_hash'),
+  homeRc: text('home_rc'),
+  cancellationReason: text('cancellation_reason'),
   houseCode: text('house_code').notNull(),
   nickname: text('nickname').notNull(),
   groupSize: integer('group_size').notNull(),
@@ -31,6 +33,7 @@ export const eventSettings = sqliteTable('event_settings', {
   status: text('status').notNull().default('open'),
   stationControlsLocked: integer('station_controls_locked', { mode: 'boolean' }).notNull().default(false),
   eventEndAt: integer('event_end_at'),
+  homeRcOnlyAt: integer('home_rc_only_at'),
   updatedAt: integer('updated_at').notNull(),
   updatedBy: text('updated_by').notNull().default('system'),
 });
@@ -78,4 +81,9 @@ export const announcement = sqliteTable('announcement', {
   title: text('title').notNull(),
   message: text('message').notNull(),
   publishedAt: integer('published_at').notNull(),
+});
+
+export const participantDevices = sqliteTable('participant_devices', {
+  deviceTokenHash: text('device_token_hash').primaryKey(),
+  homeRc: text('home_rc').notNull(),
 });

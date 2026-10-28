@@ -1,4 +1,5 @@
-import { getDb, temporarilyUnavailable } from '@/lib/db';
+import { getQueueDb } from '@/lib/rc-policy';
+import { temporarilyUnavailable } from '@/lib/db';
 import { HOUSES, type HouseCode } from '@/lib/houses';
 import { isOverallModerator } from '@/lib/moderator-auth';
 import { recordActivity, recordSiteError } from '@/lib/operations';
@@ -28,8 +29,8 @@ function singaporeDate(timestamp: number) {
 
 export async function GET(request: Request) {
   if (!await isOverallModerator(request)) return Response.json({ error: 'Overall moderator access required.' }, { status: 401 });
-  const db = getDb();
   try {
+    const db = await getQueueDb();
     const result = await db.prepare(`SELECT house_code AS houseCode, queue_number AS queueNumber,
       nickname, group_size AS groupSize, status, joined_at AS joinedAt
       FROM queue_entries

@@ -4,6 +4,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { HouseCode } from '@/lib/houses';
+import type { HomeRcStats } from '@/lib/participant-stats';
 import AnnouncementControl from './AnnouncementControl';
 
 type HouseOverview = {
@@ -42,8 +43,9 @@ type OperationalEvent = {
 };
 
 type OverallData = {
-  event: { status: string; stationControlsLocked: boolean; eventEndAt: number | null; updatedAt: number; updatedBy: string };
+  event: { status: string; stationControlsLocked: boolean; eventEndAt: number | null; homeRcOnlyAt: number | null; updatedAt: number; updatedBy: string };
   houses: HouseOverview[];
+  homeRcStats: HomeRcStats[];
   events: OperationalEvent[];
   generatedAt: number;
 };
@@ -74,6 +76,8 @@ export default function OverallModeratorDashboard() {
   const [pending, setPending] = useState('');
   const [closingTime, setClosingTime] = useState('');
   const closingTimeDirty = useRef(false);
+  const [rcCutoff, setRcCutoff] = useState('');
+  const rcCutoffDirty = useRef(false);
 
   const load = useCallback(async () => {
     try {
@@ -82,6 +86,7 @@ export default function OverallModeratorDashboard() {
       const result = await response.json() as OverallData & { error?: string };
       if (!response.ok) throw new Error(result.error || 'Unable to load overall event control.');
       setData(result);
+      if (!rcCutoffDirty.current) setRcCutoff(result.event.homeRcOnlyAt ? new Date(result.event.homeRcOnlyAt + 8 * 3600000).toISOString().slice(0, 16) : '');
       if (!closingTimeDirty.current) setClosingTime(localDateTimeValue(result.event.eventEndAt));
       setError('');
     } catch (reason) {
@@ -151,9 +156,25 @@ export default function OverallModeratorDashboard() {
         <div className="closing-time-control"><label htmlFor="event-closing-time">EVENT CLOSING TIME</label><div><input id="event-closing-time" type="datetime-local" value={closingTime} onChange={(event) => { closingTimeDirty.current = true; setClosingTime(event.target.value); }} /><button disabled={Boolean(pending)} onClick={() => void saveClosingTime()}>Save</button></div></div>
       </section>
 
+      <section className="overall-control-panel rc-cutoff-control">
+        <div><small>PARTICIPANT ACCESS</small><h2>Home RC only</h2><p>At the cutoff, cancel all waiting and skipped tickets outside the group’s home RC and block new outside-RC joins. Tickets without a selected RC are also cancelled. Own-RC tickets stay valid.</p><p>{data?.event.homeRcOnlyAt ? `Cutoff: ${new Date(data.event.homeRcOnlyAt).toLocaleString('en-SG', { timeZone: 'Asia/Singapore', dateStyle: 'medium', timeStyle: 'short' })} SGT${data.generatedAt >= data.event.homeRcOnlyAt ? ' — active' : ' — scheduled'}` : 'No cutoff is set.'} Clearing or moving the cutoff will not restore cancelled tickets.</p></div>
+        <div className="closing-time-control"><label htmlFor="rc-cutoff">HOME-RC-ONLY CUTOFF (SINGAPORE TIME)</label><div><input id="rc-cutoff" type="datetime-local" value={rcCutoff} onChange={(event) => { rcCutoffDirty.current = true; setRcCutoff(event.target.value); }} /><button disabled={Boolean(pending) || !data || !rcCutoff} onClick={() => {
+          const homeRcOnlyAt = new Date(`${rcCutoff}:00+08:00`).getTime();
+          if (!Number.isFinite(homeRcOnlyAt)) { setError('Choose a valid cutoff time.'); return; }
+          void update({ homeRcOnlyAt }, 'rc-cutoff').then(() => { rcCutoffDirty.current = false; });
+        }}>Save cutoff</button></div><button disabled={Boolean(pending) || !data?.event.homeRcOnlyAt} onClick={() => { setRcCutoff(''); void update({ homeRcOnlyAt: null }, 'rc-cutoff-clear').then(() => { rcCutoffDirty.current = false; }); }}>Clear cutoff</button></div>
+      </section>
+
       <AnnouncementControl />
 
       <section className="overall-stats"><div><small>WAITING GROUPS</small><strong>{totalWaiting}</strong></div><div><small>PARTICIPANTS ENTERED</small><strong>{totalEntered}</strong></div><div><small>ACTIVE ALERTS</small><strong>{activeAlerts.length}</strong></div></section>
+
+      <section className="overall-section" id="home-rc-stats" aria-labelledby="home-rc-stats-title">
+        <div className="overall-section-title"><div><small>EVENT REPORT</small><h2 id="home-rc-stats-title">Participants by home RC</h2></div><a className="overall-export" href="/api/moderator/overall/export">Download event report</a></div>
+        <p className="rc-stats-explanation">Estimated participants counts each browser’s group once across all houses, using its largest recorded group size. All group members are counted as belonging to the selected RC. Haunted-house admissions counts every entered visit, including repeat visits.</p>
+        <div className="rc-stats-table-wrap"><table className="rc-stats-table"><caption className="sr-only">Estimated participants and haunted-house admissions by home residential college</caption><thead><tr><th scope="col">Home RC</th><th scope="col">Estimated participants</th><th scope="col">Haunted-house admissions</th></tr></thead><tbody>{data?.homeRcStats.map((rc) => <tr key={rc.code}><th scope="row">{rc.name}</th><td>{rc.estimatedParticipants}</td><td>{rc.admissions}</td></tr>)}</tbody><tfoot><tr><th scope="row">Total</th><td>{data?.homeRcStats.reduce((sum, rc) => sum + rc.estimatedParticipants, 0) ?? '—'}</td><td>{data?.homeRcStats.reduce((sum, rc) => sum + rc.admissions, 0) ?? '—'}</td></tr></tfoot></table></div>
+        <p className="rc-stats-explanation">The participant estimate includes groups with waiting, skipped or cancelled tickets. Separate browsers or cleared browser storage can count the same group again. It is an estimate of groups that registered, rather than a verified headcount. Export the report before deleting ticket records.</p>
+      </section>
 
       <section className="overall-section" id="houses"><div className="overall-section-title"><div><small>ALL-HOUSE OVERVIEW</small><h2>Queue health</h2></div><span>Updated {timeLabel(data?.generatedAt || null)}</span></div>
         <div className="overall-house-grid">{data?.houses.map((house) => <article className={`overall-house-card ${house.isDelayed ? 'delayed' : ''}`} style={{ '--accent': house.accent } as React.CSSProperties} key={house.code}>

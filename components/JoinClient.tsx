@@ -5,8 +5,8 @@
 import { FormEvent, useEffect, useRef, useState } from 'react';
 import { HOUSE_BY_CODE, MIN_GROUP_SIZE, MAX_GROUP_SIZE, type HouseCode } from '@/lib/houses';
 import { minutesPerGroup } from '@/lib/queue';
-
-const DEVICE_TOKEN_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+import { getParticipantDeviceToken } from '@/lib/participant-device';
+import { useParticipantPopups } from './ParticipantPopupProvider';
 
 export default function JoinClient({ houseCode }: { houseCode: HouseCode }) {
   const house = HOUSE_BY_CODE[houseCode];
@@ -19,28 +19,13 @@ export default function JoinClient({ houseCode }: { houseCode: HouseCode }) {
   const [loading, setLoading] = useState(false);
   const [checkingExisting, setCheckingExisting] = useState(true);
   const joinKey = useRef<string | null>(null);
-  const deviceToken = useRef<string | null>(null);
-
-  function getDeviceToken() {
-    if (deviceToken.current) return deviceToken.current;
-    const storageKey = 'night-of-frights-device-id';
-    try {
-      const saved = localStorage.getItem(storageKey);
-      if (saved && DEVICE_TOKEN_PATTERN.test(saved)) { deviceToken.current = saved; return saved; }
-      const created = crypto.randomUUID();
-      localStorage.setItem(storageKey, created);
-      deviceToken.current = created;
-      return created;
-    } catch {
-      deviceToken.current = crypto.randomUUID();
-      return deviceToken.current;
-    }
-  }
+  const { homeRc, ownRcOnly } = useParticipantPopups();
+  const restricted = ownRcOnly && homeRc !== houseCode;
 
   useEffect(() => {
     let stopped = false;
     const findExisting = async () => {
-      getDeviceToken();
+      getParticipantDeviceToken();
       try {
         const saved = JSON.parse(localStorage.getItem('night-of-frights-tickets') || '[]') as unknown;
         const queueNumbers = Array.isArray(saved) ? saved.filter((value): value is string => typeof value === 'string').slice(-24) : [];
@@ -62,14 +47,16 @@ export default function JoinClient({ houseCode }: { houseCode: HouseCode }) {
   }, [houseCode]);
 
   async function join(event: FormEvent) {
-    event.preventDefault(); setLoading(true); setError('');
+    event.preventDefault();
+    if (!homeRc || restricted) return;
+    setLoading(true); setError('');
     try {
       joinKey.current ||= crypto.randomUUID();
       let ticket: ({ queueNumber: string; nickname?: string } & Record<string, unknown>) | undefined;
       let existingTicket = false;
       for (let attempt = 0; attempt < 3; attempt++) {
         try {
-          const response = await fetch('/api/queues', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ houseCode, nickname, groupSize, joinKey: joinKey.current, deviceToken: getDeviceToken() }) });
+          const response = await fetch('/api/queues', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ houseCode, nickname, groupSize, joinKey: joinKey.current, deviceToken: getParticipantDeviceToken() }) });
           const data = await response.json() as { error?: string; existing?: boolean; ticket?: typeof ticket };
           if (response.ok && data.ticket) {
             ticket = data.ticket;
@@ -104,13 +91,15 @@ export default function JoinClient({ houseCode }: { houseCode: HouseCode }) {
       <div className="join-intro"><div className="eyebrow"><span /> {house.name} haunted house</div><h1>Join the<br /><em>night queue.</em></h1><p>One ticket covers your whole group. Your wait updates automatically as the line moves.</p><div className="join-venue"><strong>{house.title}</strong><span><span aria-hidden="true">⌖</span>{house.location}</span></div><div className="join-facts"><span><b>{minutesPerGroup(houseCode)}</b> min / group</span><span><b>{maxGroupSize}</b> pax maximum</span></div></div>
       <form className="join-form" onSubmit={join}>
         <div className="form-number">01 — YOUR GROUP</div>
+        {homeRc && <p className="rc-notice">Home RC: <b>{HOUSE_BY_CODE[homeRc].name}</b></p>}
+        {restricted && <p className="form-error" role="status">Queues are now reserved for each RC’s own residents. You can only join your own RC’s haunted house.</p>}
         <label htmlFor="nickname">Team nickname</label>
         <input id="nickname" value={nickname} onChange={(event) => setNickname(event.target.value)} minLength={2} maxLength={30} placeholder="E.g. Spooky Bananas" autoComplete="off" enterKeyHint="done" required />
         <small>Use something your group remembers. Do not enter real names or personal information.</small>
         <label>Number of people{minGroupSize > 1 ? ` (${minGroupSize}–${maxGroupSize})` : ''}</label>
         <div className={`pax-grid${groupSizeOptions.length === 5 ? ' pax-grid-five' : ''}`}>{groupSizeOptions.map((size) => <button type="button" className={groupSize === size ? 'selected' : ''} aria-pressed={groupSize === size} aria-label={`${size} ${size === 1 ? 'person' : 'people'}`} onClick={() => setGroupSize(size)} key={size}>{size}</button>)}</div>
         {error && <p className="form-error" role="alert">{error}</p>}
-        <button className="submit-button" disabled={loading || checkingExisting}>{checkingExisting ? 'Checking existing tickets…' : loading ? 'Joining queue…' : `Join ${house.name} queue`} <span>→</span></button>
+        <button className="submit-button" disabled={loading || checkingExisting || !homeRc || restricted}>{checkingExisting ? 'Checking existing tickets…' : loading ? 'Joining queue…' : `Join ${house.name} queue`} <span>→</span></button>
         <p className="privacy-note">Your nickname is only shown to your station master for verification and is not displayed publicly.</p>
       </form>
     </section>

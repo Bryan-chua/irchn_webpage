@@ -1,4 +1,5 @@
-import { getDb, temporarilyUnavailable } from '@/lib/db';
+import { getQueueDb } from '@/lib/rc-policy';
+import { temporarilyUnavailable } from '@/lib/db';
 import { HOUSES, type HouseCode } from '@/lib/houses';
 import { estimatedClearSeconds } from '@/lib/queue';
 import { recordSiteError } from '@/lib/operations';
@@ -25,7 +26,7 @@ export async function GET(request: Request) {
       console.warn('House summary cache read failed; using D1.', error);
     }
 
-    const db = getDb();
+    const db = await getQueueDb();
     const rows = await db.prepare(`SELECT hs.house_code, hs.status, hs.last_entered_at,
       COUNT(q.id) AS waiting_count, MIN(q.joined_at) AS first_waiting_at
       FROM house_settings hs

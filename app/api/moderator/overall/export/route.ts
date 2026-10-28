@@ -2,6 +2,7 @@ import { getDb, temporarilyUnavailable } from '@/lib/db';
 import { HOUSES, type HouseCode } from '@/lib/houses';
 import { isOverallModerator } from '@/lib/moderator-auth';
 import { recordSiteError } from '@/lib/operations';
+import { getHomeRcStats } from '@/lib/participant-stats';
 
 type ParticipantRow = { house_code: HouseCode; participants: number };
 type IssueRow = {
@@ -30,7 +31,7 @@ export async function GET(request: Request) {
   if (!await isOverallModerator(request)) return Response.json({ error: 'Overall moderator access required.' }, { status: 401 });
   const db = getDb();
   try {
-    const [participantRows, issueRows] = await Promise.all([
+    const [participantRows, issueRows, homeRcStats] = await Promise.all([
       db.prepare(`SELECT house_code, COALESCE(SUM(group_size), 0) AS participants
         FROM queue_entries WHERE status = 'entered' GROUP BY house_code`).all<ParticipantRow>(),
       db.prepare(`SELECT house_code AS houseCode, severity, event_type AS eventType,
@@ -38,12 +39,17 @@ export async function GET(request: Request) {
         acknowledged_at AS acknowledgedAt, resolved_at AS resolvedAt
         FROM operational_events WHERE category = 'alert'
         ORDER BY last_occurred_at ASC`).all<IssueRow>(),
+      getHomeRcStats(db),
     ]);
     const participantsByHouse = new Map(participantRows.results.map((row) => [row.house_code, Number(row.participants || 0)]));
-    const header = ['record_type', 'house', 'total_participants_entered', 'severity', 'event_type', 'description', 'count', 'first_occurred_at', 'last_occurred_at', 'acknowledged_at', 'resolved_at'];
+    const header = ['record_type', 'house', 'total_participants_entered', 'severity', 'event_type', 'description', 'count', 'first_occurred_at', 'last_occurred_at', 'acknowledged_at', 'resolved_at', 'home_rc', 'estimated_participants', 'haunted_house_admissions', 'counting_notes'];
     const rows: unknown[][] = [header];
     for (const house of HOUSES) {
       rows.push(['participant_summary', house.name, participantsByHouse.get(house.code) || 0, '', '', '', '', '', '', '', '']);
+    }
+    for (const rc of homeRcStats) {
+      rows.push(['home_rc_summary', ...Array(10).fill(''), rc.name, rc.estimatedParticipants, rc.admissions,
+        'Estimated participants: largest group size per anonymous browser across all tickets, including waiting/skipped/cancelled. Tickets without a device token count separately. Admissions: sum of group sizes on entered tickets; repeat visits count again.']);
     }
     for (const issue of issueRows.results) {
       const house = HOUSES.find((candidate) => candidate.code === issue.houseCode);
@@ -53,7 +59,7 @@ export async function GET(request: Request) {
         isoTime(issue.acknowledgedAt), isoTime(issue.resolvedAt),
       ]);
     }
-    const csv = rows.map((row) => row.map(csvValue).join(',')).join('\r\n');
+    const csv = rows.map((row) => [...row, ...Array(header.length - row.length).fill('')].map(csvValue).join(',')).join('\r\n');
     const date = new Date().toISOString().slice(0, 10);
     return new Response(`\uFEFF${csv}`, {
       headers: {

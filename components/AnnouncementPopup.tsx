@@ -15,8 +15,8 @@ export default function AnnouncementPopup() {
   const [announcement, setAnnouncement] = useState<Announcement | null>(null);
   const dialog = useRef<HTMLDialogElement>(null);
   const participantPage = !pathname?.startsWith('/moderator');
-  const { guideIsBlocking } = useParticipantPopups();
-  const canShow = participantPage && (pathname !== '/' || !guideIsBlocking);
+  const { guideIsBlocking, rcIsBlocking } = useParticipantPopups();
+  const canShow = participantPage && !rcIsBlocking && (pathname !== '/' || !guideIsBlocking);
 
   useEffect(() => {
     if (!participantPage) return;

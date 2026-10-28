@@ -75,7 +75,34 @@ export default function ModeratorDashboard({ expectedHouse }: { expectedHouse: H
   const waiting = useMemo(() => data?.active.filter((entry) => entry.status === 'waiting') || [], [data]);
   const firstWaitingAt = waiting.length ? Math.min(...waiting.map((entry) => entry.joinedAt)) : null;
   const clearMinutes = Math.ceil(estimatedClearSeconds(expectedHouse, waiting.length, data?.lastEnteredAt, now, firstWaitingAt) / 60);
-  async function update(payload: object) { if (usingOfflineSnapshot) { setError('Offline snapshots are read-only. Record changes on the printed list until the live queue returns.'); return; } setError(''); try { const response = await fetch('/api/moderator/queue', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }); if (!response.ok) { const result = await response.json() as { error?: string }; setError(result.error || 'Action failed.'); return; } setSelected([]); await load(); } catch { setUsingOfflineSnapshot(true); setSelected([]); setError('Action failed. The queue is now read-only until a live refresh succeeds.'); } }
+  async function update(payload: { ids?: number[]; status?: string; queueStatus?: string }) {
+    if (usingOfflineSnapshot) { setError('Offline snapshots are read-only. Record changes on the printed list until the live queue returns.'); return; }
+    setError('');
+    // The API accepts at most 100 IDs per action. Process every selected group,
+    // retaining only unprocessed selections if a later batch fails.
+    const ids = payload.ids?.filter((id) => payload.status !== 'skipped' || data?.active.some((entry) => entry.id === id && entry.status === 'waiting'));
+    if (ids && !ids.length) { setError('The selected groups are already skipped. Refresh the queue before trying again.'); return; }
+    const batches = ids
+      ? Array.from({ length: Math.ceil(ids.length / 100) }, (_, index) => ({ ...payload, ids: ids.slice(index * 100, (index + 1) * 100) }))
+      : [payload];
+    try {
+      for (const batch of batches) {
+        const response = await fetch('/api/moderator/queue', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(batch) });
+        if (!response.ok) {
+          const result = await response.json() as { error?: string };
+          await load();
+          setError(result.error || 'Action failed. Any remaining selected groups have not been processed.');
+          return;
+        }
+        if (batch.ids) setSelected((current) => current.filter((id) => !batch.ids!.includes(id)));
+      }
+      setSelected([]);
+      await load();
+    } catch {
+      setUsingOfflineSnapshot(true); setSelected([]);
+      setError('Action failed. The queue is now read-only until a live refresh succeeds.');
+    }
+  }
   async function undo(entry: Entry) { await update({ ids: [entry.id], status: 'waiting' }); }
   async function logout() { try { await fetch('/api/moderator/logout', { method: 'POST' }); } finally { window.location.assign('/moderator'); } }
   function toggle(id: number) { setSelected((current) => current.includes(id) ? current.filter((value) => value !== id) : [...current, id]); }

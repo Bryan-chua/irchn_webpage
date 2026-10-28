@@ -139,3 +139,7 @@ Signing out clears the station session and returns the device to the station-mas
 - **A participant cannot find a ticket:** ask them to check the queue number against their screenshot. Queue lookup ignores letter case and spaces.
 - **A participant's nickname is missing from a reopened ticket:** verify it against their original screenshot and the private nickname shown on your dashboard.
 - **A group was marked entered by mistake:** Click the undo button in **Entered history**.
+
+## Home-RC-only cutoff
+
+Overall control may set a cutoff that cancels waiting and skipped groups from outside your RC, including groups with no selected RC. These groups disappear from the active live queue and are excluded from new emergency backups. They cannot be admitted or restored after the cutoff. Tickets belonging to your own RC remain valid. If using an offline snapshot, check the current event instructions with overall control before admitting groups from an older backup.

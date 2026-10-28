@@ -13,7 +13,7 @@ This guide explains how participants use the **Abandoned Institutions Queue Syst
 
 ## 1. Choose a haunted house
 
-On your first visit to the homepage, the participant-guide tip appears first. Dismiss it with **Got it**, or select **Open guide** and close the guide when you finish reading. Any unread event announcement will then appear.
+On your first visit to the homepage, the participant-guide tip appears first. Dismiss it with **Got it**, or select **Open guide** and close the guide when you finish reading. Select your home RC next if prompted, then any unread event announcement will appear.
 
 If an event announcement appears when you open a page, read it and select **Got it** to dismiss it. The same announcement stays dismissed in this browser; a new announcement will appear again. Announcements may reappear if browser storage is cleared or unavailable.
 
@@ -100,3 +100,7 @@ To join another haunted house, select **Join another queue** on the ticket page 
 ## Privacy reminder
 
 The website stores a random anonymous device token in this browser to prevent duplicate active tickets for the same haunted house. The server stores only a one-way hash of that token; it does not use your IP address or collect a real name, phone number, email address, or NUS ID.
+
+## Your home RC
+
+Select your group’s home RC when prompted. This choice is remembered on this browser and cannot be changed after confirmation. If organisers set a home-RC-only cutoff, all waiting and skipped tickets outside your home RC are cancelled at that time, and you can only join your own RC’s queue afterwards. Your own-RC tickets remain valid. Select your RC before the cutoff; tickets without an RC are also cancelled.

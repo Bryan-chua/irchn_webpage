@@ -1,5 +1,6 @@
+import { getQueueDb, tokenHash, RC_CUTOFF_MESSAGE } from '@/lib/rc-policy';
 import { env } from 'cloudflare:workers';
-import { getDb, publicQueue, temporarilyUnavailable } from '@/lib/db';
+import { publicQueue, temporarilyUnavailable } from '@/lib/db';
 import { isHouseCode, MIN_GROUP_SIZE, MAX_GROUP_SIZE } from '@/lib/houses';
 import { raiseAlert, recordSiteError } from '@/lib/operations';
 
@@ -22,11 +23,6 @@ function createQueueNumber(houseCode: string) {
 
 function validJoinKey(value: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
-}
-
-async function tokenHash(value: string) {
-  const bytes = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
-  return Array.from(new Uint8Array(bytes), (byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
 async function observeJoinRateLimit() {
@@ -138,7 +134,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const db = getDb();
+    const db = await getQueueDb();
     const houseCode = typeof body?.houseCode === 'string' ? body.houseCode.toUpperCase() : '';
     const nickname = typeof body?.nickname === 'string' ? body.nickname.trim().replace(/\s+/g, ' ') : '';
     const groupSize = Number(body?.groupSize);
@@ -149,6 +145,12 @@ export async function POST(request: Request) {
     const maxGroupSize = MAX_GROUP_SIZE[houseCode];
     if (!Number.isInteger(groupSize) || groupSize < minGroupSize || groupSize > maxGroupSize) return Response.json({ error: `Group size must be between ${minGroupSize} and ${maxGroupSize} for this house.` }, { status: 400 });
 
+    const profile = await db.prepare('SELECT home_rc AS homeRc FROM participant_devices WHERE device_token_hash = ?').bind(deviceTokenHash).first<{ homeRc: string }>();
+    if (!profile) return Response.json({ error: 'Please select your home RC before joining a queue.' }, { status: 400 });
+    const policy = await db.prepare('SELECT home_rc_only_at AS cutoff FROM event_settings WHERE id = 1').first<{ cutoff: number | null }>();
+    if (policy?.cutoff != null && Date.now() >= policy.cutoff && profile.homeRc !== houseCode) {
+      return Response.json({ error: RC_CUTOFF_MESSAGE }, { status: 403 });
+    }
     const context = await getJoinContext(db, joinKey, houseCode);
     if (context?.queue_number) return ticketResponse(context);
     const activeDeviceTicket = await existingDeviceJoin(db, houseCode, deviceTokenHash);
@@ -162,8 +164,8 @@ export async function POST(request: Request) {
       const joinedAt = Date.now();
       try {
         const result = await db.prepare(`INSERT INTO queue_entries
-          (queue_number, join_key, device_token_hash, house_code, nickname, group_size, status, joined_at)
-          VALUES (?, ?, ?, ?, ?, ?, 'waiting', ?)`).bind(queueNumber, joinKey, deviceTokenHash, houseCode, nickname, groupSize, joinedAt).run();
+          (queue_number, join_key, device_token_hash, home_rc, house_code, nickname, group_size, status, joined_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, 'waiting', ?)`).bind(queueNumber, joinKey, deviceTokenHash, profile.homeRc, houseCode, nickname, groupSize, joinedAt).run();
         const id = Number(result.meta.last_row_id);
         const ahead = await db.prepare(`SELECT COUNT(*) AS count, MIN(joined_at) AS first_waiting_at FROM queue_entries
           WHERE house_code = ? AND status = 'waiting' AND id < ?`).bind(houseCode, id).first<{ count: number; first_waiting_at: number | null }>();
@@ -180,6 +182,7 @@ export async function POST(request: Request) {
           first_waiting_at: Number(ahead?.first_waiting_at) || null,
         }, 201);
       } catch (error) {
+        if (String(error).includes('rc_cutoff')) return Response.json({ error: RC_CUTOFF_MESSAGE }, { status: 403 });
         const duplicateJoin = await existingJoin(db, joinKey, houseCode);
         if (duplicateJoin) return ticketResponse(duplicateJoin);
         const duplicateDeviceTicket = await existingDeviceJoin(db, houseCode, deviceTokenHash);
