@@ -11,7 +11,8 @@ import { HOUSES, HOUSE_BY_CODE } from '@/lib/houses';
 type HouseSummary = (typeof HOUSES)[number] & { status: string; waitingCount: number; estimatedMinutes: number; isDelayed: boolean };
 type HousesResponse = { houses?: HouseSummary[] };
 
-const REFRESH_MS = 10_000;
+const REFRESH_MS = 4_000;
+const REQUEST_TIMEOUT_MS = 10_000;
 const MAX_REFRESH_MS = 60_000;
 
 export default function HomeClient() {
@@ -21,27 +22,61 @@ export default function HomeClient() {
   const [showSafeWordInfo, setShowSafeWordInfo] = useState(false);
 
   useEffect(() => {
-    let stopped = false;
-    let timer: ReturnType<typeof setTimeout>;
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout> | undefined;
     let failures = 0;
-    const refresh = async () => {
+    let inFlight = false;
+    let refreshOnCompletion = false;
+    const refresh = async (fresh = false) => {
+      if (controller.signal.aborted || document.hidden || inFlight) return;
+      inFlight = true;
+      clearTimeout(timer);
+      const requestController = new AbortController();
+      const abortRequest = () => requestController.abort();
+      controller.signal.addEventListener('abort', abortRequest, { once: true });
+      const timeout = setTimeout(abortRequest, REQUEST_TIMEOUT_MS);
       try {
-        const response = await fetch('/api/houses');
+        const response = await fetch(fresh ? '/api/houses?fresh=1' : '/api/houses', { cache: 'no-store', signal: requestController.signal });
         const data = await response.json() as HousesResponse;
         if (!response.ok || !data.houses) throw new Error('Unable to refresh house queues.');
-        if (!stopped) setHouses(data.houses);
+        if (!controller.signal.aborted) setHouses(data.houses);
         failures = 0;
       } catch {
         failures += 1;
       } finally {
-        if (!stopped) {
+        clearTimeout(timeout);
+        controller.signal.removeEventListener('abort', abortRequest);
+        inFlight = false;
+        if (!controller.signal.aborted && !document.hidden && refreshOnCompletion) {
+          refreshOnCompletion = false;
+          void refresh(true);
+        } else if (!controller.signal.aborted && !document.hidden) {
           const backoff = Math.min(MAX_REFRESH_MS, REFRESH_MS * (2 ** failures));
-          timer = setTimeout(refresh, backoff * (0.8 + Math.random() * 0.4));
+          timer = setTimeout(() => void refresh(), backoff * (0.8 + Math.random() * 0.4));
         }
       }
     };
+    const resume = () => {
+      clearTimeout(timer);
+      failures = 0;
+      if (!document.hidden) {
+        if (inFlight) refreshOnCompletion = true;
+        else void refresh(true);
+      }
+    };
     void refresh();
-    return () => { stopped = true; clearTimeout(timer); };
+    document.addEventListener('visibilitychange', resume);
+    window.addEventListener('focus', resume);
+    window.addEventListener('online', resume);
+    window.addEventListener('pageshow', resume);
+    return () => {
+      controller.abort();
+      clearTimeout(timer);
+      document.removeEventListener('visibilitychange', resume);
+      window.removeEventListener('focus', resume);
+      window.removeEventListener('online', resume);
+      window.removeEventListener('pageshow', resume);
+    };
   }, []);
 
   function lookup(event: FormEvent) {
@@ -67,7 +102,7 @@ export default function HomeClient() {
         {homeRc && <p className="rc-notice">Home RC: <b>{HOUSE_BY_CODE[homeRc].name}</b>. {ownRcOnly ? 'Queues are now open to each RC’s own residents only. Tickets outside your RC have been cancelled.' : homeRcOnlyAt ? `From ${new Date(homeRcOnlyAt).toLocaleString('en-SG', { timeZone: 'Asia/Singapore', dateStyle: 'medium', timeStyle: 'short' })} (SGT), tickets outside your RC will be cancelled and you can only join your own RC’s queue.` : 'Your RC is remembered on this browser.'}</p>}
         <div className="house-grid">{houses.map((house, index) => (
           <a className={`house-card ${(house.status !== 'open' || (ownRcOnly && house.code !== homeRc)) ? 'house-disabled' : ''}`} href={house.status === 'open' && !(ownRcOnly && house.code !== homeRc) ? `/join/${house.code.toLowerCase()}` : undefined} key={house.code} style={{'--accent': house.accent} as React.CSSProperties} aria-disabled={(house.status !== 'open' || (ownRcOnly && house.code !== homeRc))}>
-            <div className="card-top"><span className="house-index">0{index + 1}</span><span className={`open-pill status-${house.status}`}><i /> {ownRcOnly && house.code !== homeRc ? 'Residents only' : house.status}</span></div>
+            <div className="card-top"><span className="house-index">0{index + 1}</span><span className={`open-pill status-${house.status}`}><i /> {house.status === 'open' && ownRcOnly && house.code !== homeRc ? 'Residents only' : house.status}</span></div>
             <div className="house-identity"><span className="house-rc">{house.name}</span><h3>{house.title}</h3><p className="house-location"><span aria-hidden="true">⌖</span>{house.location}</p></div>
             <div className="card-bottom"><span>{house.waitingCount === 0 ? <b>No wait</b> : house.isDelayed ? <b>Delayed</b> : <>About <b>{house.estimatedMinutes}</b> min wait</>}</span><span>{house.waitingCount} {house.waitingCount === 1 ? 'group' : 'groups'} waiting</span><strong>↗</strong></div>
           </a>

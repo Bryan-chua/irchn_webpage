@@ -465,3 +465,312 @@ test('home-RC event statistics stay restricted to overall moderators', async () 
   assert.equal((await load('@/app/api/moderator/overall/route').GET(request)).status, 401);
   assert.equal((await load('@/app/api/moderator/overall/export/route').GET(request)).status, 401);
 });
+
+function openingFixture(globals = {}, overrides = {}) {
+  const sqlite = new DatabaseSync(':memory:');
+  for (const file of readdirSync('drizzle').filter(f => f.endsWith('.sql')).sort()) sqlite.exec(readFileSync(path.join('drizzle', file), 'utf8'));
+  const db = databaseAdapter(sqlite);
+  sqlite.exec("UPDATE house_settings SET status = 'closed'; UPDATE event_settings SET status = 'closed', station_controls_locked = 1, event_end_at = NULL WHERE id = 1;");
+  const load = moduleLoader({
+    'cloudflare:workers': { env: { DB: db, JOIN_RATE_LIMITER: { limit: async () => ({ success: true }) } } },
+    '@/lib/moderator-auth': { isOverallModerator: async () => true, moderatorHouse: async () => 'RV' },
+    '@/lib/operations': { recordSiteError: async () => {}, recordActivity: async () => {}, recordStationPresence: async () => {}, raiseAlert: async () => {}, resolveAlert: async () => {} },
+    ...overrides,
+  }, globals);
+  return { sqlite, db, load };
+}
+
+test('scheduled opening fires once, opens every house, unlocks controls and keeps later manual overrides', async () => {
+  const { sqlite, db, load } = openingFixture();
+  try {
+    const { applyScheduledOpening } = load('@/lib/event-schedule');
+    const opening = Date.now() + 60000;
+    sqlite.prepare('UPDATE event_settings SET event_open_at = ? WHERE id = 1').run(opening);
+    await applyScheduledOpening(db, opening - 1);
+    assert.ok(sqlite.prepare('SELECT status FROM house_settings').all().every(h => h.status === 'closed'));
+    assert.equal(sqlite.prepare('SELECT event_opened_at FROM event_settings').get().event_opened_at, null);
+    await Promise.all(Array.from({ length: 10 }, () => applyScheduledOpening(db, opening)));
+    assert.ok(sqlite.prepare('SELECT status FROM house_settings').all().every(h => h.status === 'open'));
+    const setting = sqlite.prepare('SELECT * FROM event_settings').get();
+    assert.equal(setting.status, 'open'); assert.equal(setting.station_controls_locked, 0); assert.equal(setting.event_opened_at, opening);
+    assert.equal(sqlite.prepare("SELECT COUNT(*) AS count FROM operational_events WHERE event_type = 'scheduled_opening_applied'").get().count, 1);
+    sqlite.exec("UPDATE house_settings SET status = 'paused' WHERE house_code = 'RV'; UPDATE event_settings SET status = 'closed', station_controls_locked = 1;");
+    await applyScheduledOpening(db, opening + 60000);
+    assert.equal(sqlite.prepare("SELECT status FROM house_settings WHERE house_code = 'RV'").get().status, 'paused');
+    assert.equal(sqlite.prepare('SELECT status FROM event_settings').get().status, 'closed');
+    assert.equal(sqlite.prepare("SELECT COUNT(*) AS count FROM operational_events WHERE event_type = 'scheduled_opening_applied'").get().count, 1);
+  } finally { sqlite.close(); }
+});
+
+test('overall dashboard can schedule, reschedule and clear opening; manual global controls cancel it', async () => {
+  const { sqlite, load } = openingFixture();
+  try {
+    const route = load('@/app/api/moderator/overall/route');
+    const patch = body => route.PATCH(new Request('https://test/overall', { method: 'PATCH', body: JSON.stringify(body) }));
+    const now = Date.now(), opening = now + 3600000, end = now + 7200000, cutoff = now + 5400000;
+    assert.equal((await patch({ eventEndAt: end })).status, 200);
+    assert.equal((await patch({ homeRcOnlyAt: cutoff })).status, 200);
+    for (const invalid of ['invalid', String(opening), 0, now - 1000, opening + .5, 8640000000000001]) assert.equal((await patch({ eventOpenAt: invalid })).status, 400);
+    assert.equal((await patch({ eventOpenAt: end })).status, 400);
+    assert.equal((await patch({ eventOpenAt: opening })).status, 200);
+    let data = await (await route.GET(new Request('https://test/overall'))).json();
+    assert.equal(data.event.eventOpenAt, opening); assert.equal(data.event.eventOpenedAt, null);
+    assert.equal(data.event.status, 'closed'); assert.equal(data.event.stationControlsLocked, true);
+    assert.ok(data.houses.every(h => h.status === 'closed'));
+    assert.equal(data.event.homeRcOnlyAt, cutoff); assert.equal(data.event.eventEndAt, end);
+    assert.equal((await patch({ eventEndAt: opening })).status, 400);
+    assert.equal((await patch({ eventOpenAt: opening + 60000 })).status, 200);
+    assert.equal(sqlite.prepare('SELECT event_open_at FROM event_settings').get().event_open_at, opening + 60000);
+    assert.equal((await patch({ eventOpenAt: null })).status, 200);
+    assert.equal(sqlite.prepare('SELECT event_open_at FROM event_settings').get().event_open_at, null);
+    for (const status of ['paused', 'closed', 'open']) {
+      assert.equal((await patch({ eventOpenAt: opening })).status, 200);
+      assert.equal((await patch({ globalStatus: status })).status, 200);
+      data = await (await route.GET(new Request('https://test/overall'))).json();
+      assert.equal(data.event.eventOpenAt, null); assert.equal(data.event.eventOpenedAt, null);
+      assert.ok(data.houses.every(h => h.status === status));
+      assert.equal(data.event.homeRcOnlyAt, cutoff);
+    }
+  } finally { sqlite.close(); }
+});
+
+test('background worker opens houses without a dashboard or participant request, and ignores expired schedules', async () => {
+  const { sqlite, db, load } = openingFixture({}, {
+    'vinext/server/app-router-entry': { __esModule: true, default: { fetch: async () => new Response('app fetch preserved') } },
+  });
+  try {
+    const now = Date.now();
+    const worker = load('@/worker').default;
+    sqlite.prepare('UPDATE event_settings SET event_open_at = ? WHERE id = 1').run(now - 1);
+    await worker.scheduled({}, { DB: db });
+    assert.equal(sqlite.prepare('SELECT status FROM event_settings').get().status, 'open');
+    assert.ok(sqlite.prepare('SELECT status FROM house_settings').all().every(h => h.status === 'open'));
+    assert.equal(await (await worker.fetch(new Request('https://test/'))).text(), 'app fetch preserved');
+    sqlite.prepare("UPDATE event_settings SET event_open_at = ?, event_opened_at = NULL, event_end_at = ?, status = 'closed', station_controls_locked = 1 WHERE id = 1").run(now - 60000, now - 1000);
+    sqlite.exec("UPDATE house_settings SET status = 'closed'");
+    await worker.scheduled({}, { DB: db });
+    assert.ok(sqlite.prepare('SELECT status FROM house_settings').all().every(h => h.status === 'closed'));
+    assert.equal(sqlite.prepare('SELECT event_opened_at FROM event_settings').get().event_opened_at, null);
+  } finally { sqlite.close(); }
+});
+
+test('a public queue request applies a due opening when the background check has not run', async () => {
+  const { sqlite, load } = openingFixture({ caches: { default: { match: async () => null, put: async () => {} } } });
+  try {
+    sqlite.prepare('UPDATE event_settings SET event_open_at = ? WHERE id = 1').run(Date.now() - 1);
+    const houses = load('@/app/api/houses/route');
+    const result = await houses.GET(new Request('https://test/api/houses'));
+    assert.equal(result.status, 200); assert.ok((await result.json()).houses.every(h => h.status === 'open'));
+    const station = load('@/app/api/moderator/queue/route');
+    const control = await station.PATCH(new Request('https://test/station', { method: 'PATCH', body: JSON.stringify({ queueStatus: 'paused' }) }));
+    assert.equal(control.status, 200);
+    assert.equal(sqlite.prepare("SELECT status FROM house_settings WHERE house_code = 'RV'").get().status, 'paused');
+  } finally { sqlite.close(); }
+});
+
+test('scheduled opening is restricted to the overall moderator', async () => {
+  const { sqlite, load } = openingFixture({}, { '@/lib/moderator-auth': { isOverallModerator: async () => false } });
+  try {
+    const response = await load('@/app/api/moderator/overall/route').PATCH(new Request('https://test/overall', { method: 'PATCH', body: JSON.stringify({ eventOpenAt: Date.now() + 3600000 }) }));
+    assert.equal(response.status, 401);
+    assert.equal(sqlite.prepare('SELECT event_open_at FROM event_settings').get().event_open_at, null);
+  } finally { sqlite.close(); }
+});
+
+function homepageHarness(ownRcOnly = false) {
+  const state = [], effects = [], timers = new Map(), windowListeners = new Map(), documentListeners = new Map(), requests = [];
+  let stateIndex = 0, timerId = 0, serverStatus = 'open', hold;
+  const document = { hidden: false, addEventListener: (type, fn) => documentListeners.set(type, fn), removeEventListener: type => documentListeners.delete(type) };
+  const jsx = (type, props) => ({ type, props });
+  const load = moduleLoader({
+    react: {
+      useState(initial) { const i = stateIndex++; if (i >= state.length) state[i] = initial; return [state[i], value => { state[i] = typeof value === 'function' ? value(state[i]) : value; }]; },
+      useEffect: fn => effects.push(fn),
+    },
+    'react/jsx-runtime': { jsx, jsxs: jsx },
+    '@/components/InfoDrawer': { __esModule: true, default: () => null },
+    './ParticipantPopupProvider': { useParticipantPopups: () => ({ homeRc: 'RV', homeRcOnlyAt: null, ownRcOnly }) },
+    '@/docs/participant.md?raw': '',
+  }, {
+    document, AbortController,
+    window: { addEventListener: (type, fn) => windowListeners.set(type, fn), removeEventListener: type => windowListeners.delete(type) },
+    setTimeout: (fn, delay) => { const id = ++timerId; timers.set(id, { fn, delay }); return id; }, clearTimeout: id => timers.delete(id),
+    fetch: async (url, options) => {
+      requests.push({ url, options });
+      const status = serverStatus;
+      if (hold) await Promise.race([hold, new Promise((_, reject) => options.signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true }))]);
+      const houses = load('@/lib/houses').HOUSES.map(house => ({ ...house, status, waitingCount: 0, estimatedMinutes: 0, isDelayed: false }));
+      return { ok: true, json: async () => ({ houses }) };
+    },
+  });
+  const component = load('@/components/HomeClient.tsx').default;
+  const render = () => { stateIndex = 0; return component(); };
+  const nodes = (node, predicate) => !node || typeof node !== 'object' ? [] : [...(predicate(node) ? [node] : []), ...[node.props?.children].flat(Infinity).flatMap(child => nodes(child, predicate))];
+  render(); const cleanup = effects[0]();
+  return { state, timers, document, windowListeners, documentListeners, requests, cleanup, render, nodes,
+    change: status => { serverStatus = status; }, hold: promise => { hold = promise; },
+    async poll() {
+      const entry = [...timers].find(([, timer]) => timer.delay >= 3200 && timer.delay <= 4800);
+      assert.ok(entry, 'visible house cards must keep polling about every four seconds');
+      timers.delete(entry[0]); entry[1].fn(); await setImmediate();
+    },
+  };
+}
+
+test('homepage cards close and disable join links on the next poll without a reload', async () => {
+  const h = homepageHarness(); await setImmediate();
+  assert.ok(h.state[0].every(house => house.status === 'open'));
+  assert.ok(h.requests.every(r => r.options.cache === 'no-store'));
+  h.change('closed'); await h.poll();
+  assert.ok(h.state[0].every(house => house.status === 'closed'));
+  const cards = h.nodes(h.render(), node => node.type === 'a' && node.props.className?.startsWith('house-card'));
+  assert.equal(cards.length, 6); assert.ok(cards.every(card => card.props['aria-disabled'] && card.props.href === undefined));
+  h.change('open'); await h.poll();
+  assert.ok(h.state[0].every(house => house.status === 'open')); h.cleanup();
+});
+
+test('homepage refreshes immediately on tab return, focus, reconnect and back navigation', async () => {
+  const h = homepageHarness(); await setImmediate();
+  h.document.hidden = true; h.documentListeners.get('visibilitychange')();
+  assert.equal(h.timers.size, 0);
+  const before = h.requests.length; h.windowListeners.get('focus')(); await setImmediate(); assert.equal(h.requests.length, before);
+  h.change('closed'); h.document.hidden = false; h.documentListeners.get('visibilitychange')(); await setImmediate();
+  assert.equal(h.requests.at(-1).url, '/api/houses?fresh=1'); assert.ok(h.state[0].every(house => house.status === 'closed'));
+  for (const event of ['focus', 'online', 'pageshow']) {
+    const count = h.requests.length; h.windowListeners.get(event)(); await setImmediate();
+    assert.equal(h.requests.length, count + 1); assert.equal(h.requests.at(-1).url, '/api/houses?fresh=1');
+  }
+  h.cleanup(); assert.equal(h.timers.size, 0); assert.equal(h.windowListeners.size, 0); assert.equal(h.documentListeners.size, 0);
+});
+
+test('homepage queues a fresh return-to-tab check behind an in-flight poll and cancels work on unmount', async () => {
+  const h = homepageHarness(); await setImmediate();
+  let release; h.hold(new Promise(resolve => { release = resolve; }));
+  const poll = h.poll(); await setImmediate();
+  const inFlight = h.requests.length;
+  h.change('closed'); h.windowListeners.get('focus')(); h.windowListeners.get('online')();
+  assert.equal(h.requests.length, inFlight);
+  release(); await poll; await setImmediate();
+  assert.equal(h.requests.length, inFlight + 1); assert.equal(h.requests.at(-1).url, '/api/houses?fresh=1');
+  assert.ok(h.state[0].every(house => house.status === 'closed'));
+  h.hold(new Promise(() => {})); const pending = h.poll(); await setImmediate();
+  const count = h.requests.length; h.cleanup(); await pending; await setImmediate();
+  assert.equal(h.requests.length, count); assert.equal(h.timers.size, 0);
+});
+
+test('a hung homepage request times out and polling retries automatically', async () => {
+  const h = homepageHarness(); await setImmediate();
+  h.hold(new Promise(() => {})); await h.poll();
+  const timeout = [...h.timers].find(([, timer]) => timer.delay === 10000);
+  assert.ok(timeout); h.timers.delete(timeout[0]); timeout[1].fn(); await setImmediate();
+  assert.ok([...h.timers.values()].some(timer => timer.delay >= 6400 && timer.delay <= 9600));
+  h.cleanup();
+});
+
+test('house responses disable browser caching while preserving edge cache and bypassing it for tab-return checks', async () => {
+  let cached;
+  const { sqlite, load } = openingFixture({ caches: { default: {
+    match: async () => cached?.clone(), put: async (_key, response) => { cached = response; },
+  } } });
+  try {
+    sqlite.exec("UPDATE house_settings SET status = 'open'");
+    const route = load('@/app/api/houses/route');
+    let response = await route.GET(new Request('https://test/api/houses'));
+    assert.equal(response.headers.get('cache-control'), 'no-store');
+    assert.equal(cached.headers.get('cache-control'), 'public, max-age=3');
+    assert.ok((await response.json()).houses.every(house => house.status === 'open'));
+    sqlite.exec("UPDATE house_settings SET status = 'closed'");
+    response = await route.GET(new Request('https://test/api/houses'));
+    assert.equal(response.headers.get('cache-control'), 'no-store');
+    assert.ok((await response.json()).houses.every(house => house.status === 'open')); // Shared cache still within its TTL.
+    response = await route.GET(new Request('https://test/api/houses?fresh=1'));
+    assert.equal(response.headers.get('cache-control'), 'no-store');
+    assert.ok((await response.json()).houses.every(house => house.status === 'closed'));
+    response = await route.GET(new Request('https://test/api/houses'));
+    assert.ok((await response.json()).houses.every(house => house.status === 'closed'));
+  } finally { sqlite.close(); }
+});
+
+
+test('Closed labels take priority over Residents only after the RC cutoff', async () => {
+  const h = homepageHarness(true); await setImmediate();
+  let pills = h.nodes(h.render(), node => node.type === 'span' && node.props.className?.startsWith('open-pill'));
+  assert.equal(pills.filter(pill => pill.props.children.includes('Residents only')).length, 5);
+  h.change('closed'); await h.poll();
+  pills = h.nodes(h.render(), node => node.type === 'span' && node.props.className?.startsWith('open-pill'));
+  assert.equal(pills.length, 6); assert.ok(pills.every(pill => pill.props.children.includes('closed')));
+  h.cleanup();
+});
+
+test('automatic closing runs once, locks all houses and keeps existing tickets viewable', async () => {
+  const { sqlite, db, load } = openingFixture();
+  try {
+    const { applyEventSchedule } = load('@/lib/event-schedule');
+    const closing = Date.now() + 60000;
+    sqlite.prepare("UPDATE event_settings SET status = 'open', station_controls_locked = 0, event_end_at = ? WHERE id = 1").run(closing);
+    sqlite.exec("UPDATE house_settings SET status = 'open'; INSERT INTO queue_entries (queue_number,home_rc,house_code,nickname,group_size,joined_at) VALUES ('RV-1212','RV','RV','existing',2,1)");
+    await applyEventSchedule(db, closing - 1);
+    assert.ok(sqlite.prepare('SELECT status FROM house_settings').all().every(h => h.status === 'open'));
+    await Promise.all(Array.from({ length: 10 }, () => applyEventSchedule(db, closing)));
+    assert.ok(sqlite.prepare('SELECT status FROM house_settings').all().every(h => h.status === 'closed'));
+    const event = sqlite.prepare('SELECT * FROM event_settings').get();
+    assert.equal(event.status, 'closed'); assert.equal(event.station_controls_locked, 1); assert.equal(event.event_closed_at, closing);
+    assert.equal(sqlite.prepare("SELECT COUNT(*) AS count FROM operational_events WHERE event_type = 'scheduled_closing_applied'").get().count, 1);
+    const ticket = await load('@/app/api/queues/[queueNumber]/route').GET(new Request('https://test/ticket'), { params: Promise.resolve({ queueNumber: 'RV-1212' }) });
+    assert.equal(ticket.status, 200); assert.equal((await ticket.json()).ticket.status, 'waiting');
+    // An intentional overall override after closing has fired is respected.
+    sqlite.exec("UPDATE event_settings SET status = 'open', station_controls_locked = 0; UPDATE house_settings SET status = 'open'");
+    await applyEventSchedule(db, closing + 60000);
+    assert.ok(sqlite.prepare('SELECT status FROM house_settings').all().every(h => h.status === 'open'));
+  } finally { sqlite.close(); }
+});
+
+test('closing settings can be changed, cleared and rearmed, with immediate closing for an elapsed time', async () => {
+  const { sqlite, load } = openingFixture();
+  try {
+    const route = load('@/app/api/moderator/overall/route');
+    const patch = body => route.PATCH(new Request('https://test/overall', { method: 'PATCH', body: JSON.stringify(body) }));
+    await patch({ globalStatus: 'open' });
+    const end = Date.now() + 3600000;
+    assert.equal((await patch({ eventEndAt: end })).status, 200);
+    assert.equal(sqlite.prepare('SELECT event_closed_at FROM event_settings').get().event_closed_at, null);
+    assert.equal((await patch({ eventEndAt: Date.now() - 1000 })).status, 200);
+    let data = await (await route.GET(new Request('https://test/overall'))).json();
+    assert.equal(data.event.status, 'closed'); assert.ok(data.event.eventClosedAt); assert.equal(data.event.stationControlsLocked, true);
+    assert.equal((await patch({ eventEndAt: null })).status, 200);
+    data = await (await route.GET(new Request('https://test/overall'))).json();
+    assert.equal(data.event.eventClosedAt, null); assert.equal(data.event.eventEndAt, null); assert.equal(data.event.status, 'closed');
+    assert.equal((await patch({ eventEndAt: end })).status, 200);
+    assert.equal(sqlite.prepare('SELECT event_closed_at FROM event_settings').get().event_closed_at, null);
+  } finally { sqlite.close(); }
+});
+
+test('join inserts atomically reject manual closure, pause or the closing boundary after an open-status read', async () => {
+  const { sqlite, db, load } = openingFixture();
+  try {
+    const token = crypto.randomUUID();
+    const hash = Buffer.from(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(token))).toString('hex');
+    sqlite.prepare("INSERT INTO participant_devices (device_token_hash,home_rc) VALUES (?,'RV')").run(hash);
+    const originalPrepare = db.prepare.bind(db);
+    let atInsert;
+    db.prepare = sql => {
+      const statement = originalPrepare(sql);
+      if (sql.includes('INSERT INTO queue_entries')) {
+        const originalRun = statement.run.bind(statement);
+        statement.run = async () => { atInsert(); return originalRun(); };
+      }
+      return statement;
+    };
+    const join = load('@/app/api/queues/route');
+    for (const action of [
+      () => sqlite.exec("UPDATE house_settings SET status = 'closed' WHERE house_code = 'RV'"),
+      () => sqlite.exec("UPDATE house_settings SET status = 'paused' WHERE house_code = 'RV'"),
+      () => sqlite.prepare('UPDATE event_settings SET event_end_at = ? WHERE id = 1').run(Date.now() - 1000),
+    ]) {
+      sqlite.exec("UPDATE house_settings SET status = 'open'; UPDATE event_settings SET status = 'open', station_controls_locked = 0, event_end_at = NULL, event_closed_at = NULL");
+      atInsert = action;
+      const response = await join.POST(new Request('https://test/join', { method: 'POST', body: JSON.stringify({ houseCode: 'RV', nickname: 'boundary test', groupSize: 2, deviceToken: token, joinKey: crypto.randomUUID() }) }));
+      assert.equal(response.status, 409); assert.equal(sqlite.prepare('SELECT COUNT(*) AS count FROM queue_entries').get().count, 0);
+    }
+  } finally { sqlite.close(); }
+});

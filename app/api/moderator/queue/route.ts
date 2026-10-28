@@ -1,3 +1,4 @@
+import { applyEventSchedule } from '@/lib/event-schedule';
 import { clearOutsideRcTickets, getQueueDb } from '@/lib/rc-policy';
 import { getDb, temporarilyUnavailable } from '@/lib/db';
 import { moderatorHouse } from '@/lib/moderator-auth';
@@ -38,6 +39,7 @@ export async function PATCH(request: Request) {
   if (body?.queueStatus) {
     if (!['open', 'paused', 'closed'].includes(body.queueStatus)) return Response.json({ error: 'Invalid queue status.' }, { status: 400 });
     try {
+      await applyEventSchedule(db);
       const eventSetting = await db.prepare('SELECT station_controls_locked FROM event_settings WHERE id = 1').first<{ station_controls_locked: number }>();
       if (eventSetting?.station_controls_locked) {
         return Response.json({ error: 'House status controls are locked by overall event control.' }, { status: 423 });

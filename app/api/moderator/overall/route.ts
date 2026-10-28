@@ -1,3 +1,4 @@
+import { applyEventSchedule } from '@/lib/event-schedule';
 import { clearOutsideRcTickets, getQueueDb } from '@/lib/rc-policy';
 import { temporarilyUnavailable } from '@/lib/db';
 import { HOUSES, isHouseCode, type HouseCode } from '@/lib/houses';
@@ -21,6 +22,9 @@ type EventSetting = {
   status: string;
   stationControlsLocked: number;
   eventEndAt: number | null;
+  eventOpenAt: number | null;
+  eventOpenedAt: number | null;
+  eventClosedAt: number | null;
   homeRcOnlyAt: number | null;
   updatedAt: number;
   updatedBy: string;
@@ -45,7 +49,7 @@ export async function GET(request: Request) {
     const db = await getQueueDb();
     const [setting, rows, presenceRows, activeAlertRows, homeRcStats] = await Promise.all([
       db.prepare(`SELECT status, station_controls_locked AS stationControlsLocked,
-        event_end_at AS eventEndAt, home_rc_only_at AS homeRcOnlyAt, updated_at AS updatedAt, updated_by AS updatedBy
+        event_end_at AS eventEndAt, event_open_at AS eventOpenAt, event_opened_at AS eventOpenedAt, event_closed_at AS eventClosedAt, home_rc_only_at AS homeRcOnlyAt, updated_at AS updatedAt, updated_by AS updatedBy
         FROM event_settings WHERE id = 1`).first<EventSetting>(),
       db.prepare(`SELECT hs.house_code, hs.status, hs.last_entered_at,
         SUM(CASE WHEN q.status = 'waiting' THEN 1 ELSE 0 END) AS waiting_count,
@@ -64,7 +68,7 @@ export async function GET(request: Request) {
       getHomeRcStats(db),
     ]);
     const now = Date.now();
-    const currentSetting = setting || { status: 'open', stationControlsLocked: 0, eventEndAt: null, homeRcOnlyAt: null, updatedAt: 0, updatedBy: 'system' };
+    const currentSetting = setting || { status: 'open', stationControlsLocked: 0, eventEndAt: null, eventOpenAt: null, eventOpenedAt: null, eventClosedAt: null, homeRcOnlyAt: null, updatedAt: 0, updatedBy: 'system' };
     const rowByCode = new Map(rows.results.map((row) => [row.house_code, row]));
     const presenceByCode = new Map(presenceRows.results.map((presence) => [presence.houseCode, presence]));
     const activeConditionAlerts = new Set(activeAlertRows.results.map((alert) => `${alert.eventType}:${alert.houseCode}`));
@@ -119,6 +123,9 @@ export async function GET(request: Request) {
         status: currentSetting.status,
         stationControlsLocked: Boolean(currentSetting.stationControlsLocked),
         eventEndAt: currentSetting.eventEndAt,
+        eventOpenAt: currentSetting.eventOpenAt,
+        eventOpenedAt: currentSetting.eventOpenedAt,
+        eventClosedAt: currentSetting.eventClosedAt,
         homeRcOnlyAt: currentSetting.homeRcOnlyAt,
         updatedAt: currentSetting.updatedAt,
         updatedBy: currentSetting.updatedBy,
@@ -141,6 +148,7 @@ export async function PATCH(request: Request) {
     houseCode?: string;
     houseStatus?: string;
     eventEndAt?: number | null;
+    eventOpenAt?: number | null;
     homeRcOnlyAt?: number | null;
     acknowledgeEventId?: number;
   } | null;
@@ -155,13 +163,14 @@ export async function PATCH(request: Request) {
           VALUES (1, ?, ?, ?, 'Bryan')
           ON CONFLICT(id) DO UPDATE SET status = excluded.status,
             station_controls_locked = excluded.station_controls_locked,
+            event_open_at = NULL, event_opened_at = NULL,
             updated_at = excluded.updated_at, updated_by = excluded.updated_by`)
           .bind(body.globalStatus, locked ? 1 : 0, now),
         db.prepare('UPDATE house_settings SET status = ?').bind(body.globalStatus),
       ]);
       await recordActivity({
         eventType: 'global_status_changed', actor: 'Bryan',
-        message: `Bryan changed every house to ${body.globalStatus} and ${locked ? 'locked' : 'unlocked'} station status controls.`,
+        message: `Bryan changed every house to ${body.globalStatus} and ${locked ? 'locked' : 'unlocked'} station status controls. Any scheduled opening was cancelled.`,
       }, db);
       return Response.json({ ok: true });
     }
@@ -175,6 +184,24 @@ export async function PATCH(request: Request) {
       if (setting?.station_controls_locked) return Response.json({ error: 'Open and unlock the event before changing an individual house.' }, { status: 423 });
       await db.prepare('UPDATE house_settings SET status = ? WHERE house_code = ?').bind(body.houseStatus, houseCode).run();
       await recordActivity({ eventType: 'house_status_changed', houseCode, actor: 'Bryan', message: `Bryan changed ${houseCode} to ${body.houseStatus}.` }, db);
+      return Response.json({ ok: true });
+    }
+
+    if (Object.prototype.hasOwnProperty.call(body || {}, 'eventOpenAt')) {
+      const opening = body?.eventOpenAt;
+      if (opening !== null && (typeof opening !== 'number' || !Number.isSafeInteger(opening) || opening <= now || opening > 8640000000000000)) {
+        return Response.json({ error: 'Choose a future opening time.' }, { status: 400 });
+      }
+      if (opening !== null) {
+        const setting = await db.prepare('SELECT event_end_at FROM event_settings WHERE id = 1').first<{ event_end_at: number | null }>();
+        if (setting?.event_end_at != null && opening >= setting.event_end_at) {
+          return Response.json({ error: 'The opening time must be before the event closing time.' }, { status: 400 });
+        }
+      }
+      await db.prepare(`INSERT INTO event_settings (id, event_open_at, event_opened_at, updated_at, updated_by)
+        VALUES (1, ?, NULL, ?, 'Bryan') ON CONFLICT(id) DO UPDATE SET event_open_at = excluded.event_open_at,
+        event_opened_at = NULL, updated_at = excluded.updated_at, updated_by = excluded.updated_by`).bind(opening, now).run();
+      await recordActivity({ eventType: 'event_opening_time_changed', actor: 'Bryan', message: opening ? `Bryan scheduled all houses to open at ${new Date(opening).toISOString()}.` : 'Bryan cleared the scheduled opening time.' }, db);
       return Response.json({ ok: true });
     }
 
@@ -196,12 +223,19 @@ export async function PATCH(request: Request) {
       if (eventEndAt !== null && (!Number.isFinite(eventEndAt) || eventEndAt < now - 24 * 60 * 60 * 1000)) {
         return Response.json({ error: 'Choose a valid event closing time.' }, { status: 400 });
       }
+      if (eventEndAt !== null) {
+        const opening = await db.prepare('SELECT event_open_at, event_opened_at FROM event_settings WHERE id = 1').first<{ event_open_at: number | null; event_opened_at: number | null }>();
+        if (opening?.event_open_at != null && opening.event_opened_at === null && eventEndAt <= opening.event_open_at) {
+          return Response.json({ error: 'The closing time must be after the scheduled opening time.' }, { status: 400 });
+        }
+      }
       await db.prepare(`INSERT INTO event_settings (id, status, station_controls_locked, event_end_at, updated_at, updated_by)
         VALUES (1, 'open', false, ?, ?, 'Bryan')
-        ON CONFLICT(id) DO UPDATE SET event_end_at = excluded.event_end_at,
+        ON CONFLICT(id) DO UPDATE SET event_end_at = excluded.event_end_at, event_closed_at = NULL,
           updated_at = excluded.updated_at, updated_by = excluded.updated_by`)
         .bind(eventEndAt, now).run();
       await recordActivity({ eventType: 'event_closing_time_changed', actor: 'Bryan', message: eventEndAt ? `Bryan set the event closing time to ${new Date(eventEndAt).toISOString()}.` : 'Bryan cleared the event closing time.' }, db);
+      await applyEventSchedule(db);
       return Response.json({ ok: true });
     }
 

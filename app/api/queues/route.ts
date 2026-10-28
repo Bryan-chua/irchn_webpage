@@ -165,7 +165,11 @@ export async function POST(request: Request) {
       try {
         const result = await db.prepare(`INSERT INTO queue_entries
           (queue_number, join_key, device_token_hash, home_rc, house_code, nickname, group_size, status, joined_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, 'waiting', ?)`).bind(queueNumber, joinKey, deviceTokenHash, profile.homeRc, houseCode, nickname, groupSize, joinedAt).run();
+          SELECT ?, ?, ?, ?, ?, ?, ?, 'waiting', ?
+          WHERE EXISTS (SELECT 1 FROM house_settings WHERE house_code = ? AND status = 'open')
+            AND NOT EXISTS (SELECT 1 FROM event_settings WHERE id = 1 AND event_closed_at IS NULL
+              AND event_end_at <= CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER))`).bind(queueNumber, joinKey, deviceTokenHash, profile.homeRc, houseCode, nickname, groupSize, joinedAt, houseCode).run();
+        if (!result.meta.changes) return Response.json({ error: 'This queue has just closed or paused. Please choose another open queue.' }, { status: 409 });
         const id = Number(result.meta.last_row_id);
         const ahead = await db.prepare(`SELECT COUNT(*) AS count, MIN(joined_at) AS first_waiting_at FROM queue_entries
           WHERE house_code = ? AND status = 'waiting' AND id < ?`).bind(houseCode, id).first<{ count: number; first_waiting_at: number | null }>();

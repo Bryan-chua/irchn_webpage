@@ -1,4 +1,5 @@
 import { getDb } from './db';
+import { applyEventSchedule } from './event-schedule';
 
 export const RC_CUTOFF_MESSAGE = 'Queues are now reserved for each RC’s own residents. You can only join your own RC’s haunted house.';
 
@@ -24,6 +25,7 @@ export async function clearOutsideRcTickets(db = getDb()) {
 
 export async function getQueueDb() {
   const db = getDb();
+  await applyEventSchedule(db);
   await clearOutsideRcTickets(db);
   return db;
 }

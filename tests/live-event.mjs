@@ -136,12 +136,13 @@ try {
   originalAnnouncement = (await expect('/api/announcement', 200)).data.announcement;
   await overall({ globalStatus: 'closed' });
   await overall({ homeRcOnlyAt: null });
+  await expect('/api/announcement', 200, { method: 'PUT', scope: 'OVERALL', body: { title: 'System test in progress', message: 'Organisers are running final system checks. Queues may briefly appear open. Please wait until the event starts at 6:00 pm before joining.' } });
 
   await check('public pages, all join pages and share assets respond', async () => {
     for (const path of ['/', '/moderator', ...codes.map(c => `/join/${c.toLowerCase()}`), '/favicon.svg', '/og.png']) await expect(path, 200);
     const houses = await expect('/api/houses', 200);
     assert.deepEqual(houses.data.houses.map(h => h.code), codes);
-    assert.match(houses.headers.get('cache-control'), /max-age=3/);
+    assert.match(houses.headers.get('cache-control'), /no-store/);
   });
   await check('authentication and station isolation', async () => {
     for (const path of ['/api/moderator/queue', '/api/moderator/overall', '/api/moderator/overall/export', '/api/moderator/overall/emergency-export']) await expect(path, 401);
@@ -196,6 +197,55 @@ try {
       const stationData = await queue(code); assert.equal(stationData.active.find(e => e.queueNumber === created.queueNumber).nickname, created.nickname);
     }
     await expect('/api/queues/RV-NONEXISTENT', 404);
+  });
+  await check('all six houses: global closing and pausing update public status, block joins, lock controls and preserve tickets', async () => {
+    for (const status of ['closed', 'paused']) {
+      await overall({ globalStatus: status });
+      const publicData = (await expect('/api/houses?fresh=1', 200)).data;
+      assert.ok(publicData.houses.every(h => h.status === status));
+      for (const code of codes) {
+        await join(code, await device(code), {}, 409);
+        await station(code, { queueStatus: 'open' }, 423);
+        assert.equal((await readTicket(fixtures[code].queueNumber)).status, 'waiting');
+      }
+    }
+    await overall({ globalStatus: 'open' });
+    assert.ok((await expect('/api/houses?fresh=1', 200)).data.houses.every(h => h.status === 'open'));
+    for (const code of codes) {
+      assert.equal((await queue(code)).stationControlsLocked, false);
+      assert.equal((await join(code, await device(code))).status, 'waiting');
+    }
+  });
+  await check('all six stations: individual pause and close only affect their own house and reopening accepts joins', async () => {
+    for (const code of codes) {
+      const token = await device(code);
+      for (const status of ['paused', 'closed']) {
+        await station(code, { queueStatus: status });
+        const houses = (await expect('/api/houses?fresh=1', 200)).data.houses;
+        assert.equal(houses.find(h => h.code === code).status, status);
+        assert.ok(houses.filter(h => h.code !== code).every(h => h.status === 'open'));
+        await join(code, token, {}, 409);
+      }
+      await station(code, { queueStatus: 'open' });
+      await join(code, token);
+    }
+  });
+  await check('opening schedule saves, reschedules and clears; manual global controls cancel it', async () => {
+    const opening = Date.now() + 10 * 60000;
+    for (const status of ['closed', 'paused', 'open']) {
+      await overall({ eventOpenAt: opening });
+      let data = (await expect('/api/moderator/overall', 200, { scope: 'OVERALL' })).data;
+      assert.equal(data.event.eventOpenAt, opening); assert.equal(data.event.eventOpenedAt, null);
+      await overall({ eventOpenAt: opening + 60000 });
+      data = (await expect('/api/moderator/overall', 200, { scope: 'OVERALL' })).data;
+      assert.equal(data.event.eventOpenAt, opening + 60000);
+      await overall({ globalStatus: status });
+      data = (await expect('/api/moderator/overall', 200, { scope: 'OVERALL' })).data;
+      assert.equal(data.event.eventOpenAt, null); assert.equal(data.event.status, status);
+    }
+    await overall({ eventOpenAt: opening }); await overall({ eventOpenAt: null });
+    await expect('/api/moderator/overall', 400, { method: 'PATCH', scope: 'OVERALL', body: { eventOpenAt: Date.now() - 1000 } });
+    await expect('/api/moderator/overall', 400, { method: 'PATCH', scope: 'OVERALL', body: { eventOpenAt: originalEvent.eventEndAt } });
   });
   await check('concurrent retries issue one ticket per browser/house and support multiple houses', async () => {
     const token = await device('RV'), joinKey = crypto.randomUUID();
@@ -317,6 +367,7 @@ try {
     await station('RV', { ids: Array.from({ length: 101 }, (_, i) => i + 1), status: 'entered' }, 400);
   });
   if (report.checks.some(c => !c.pass)) throw new Error('Functional checks failed; skipping load until they are resolved.');
+  await expect('/api/announcement', 200, { method: 'PUT', scope: 'OVERALL', body: { title: 'System load test in progress', message: 'Organisers are testing the queue system before the event. Please wait until 6:00 pm to join. Automated test tickets will be removed.' } });
   const loadTickets = [];
   for (const [phase, concurrency] of [[1, 10], [2, 40]]) {
     const count = 600;

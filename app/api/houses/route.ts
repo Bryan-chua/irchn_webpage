@@ -15,13 +15,18 @@ type HouseRow = {
 const CACHE_SECONDS = 3;
 
 export async function GET(request: Request) {
-  const cacheKey = new Request(new URL('/api/houses?summary=v3', request.url), { method: 'GET' });
+  const fresh = new URL(request.url).searchParams.get('fresh') === '1';
+  const cacheKey = new Request(new URL('/api/houses?summary=v4', request.url), { method: 'GET' });
   const edgeCache = (caches as unknown as { default: Cache }).default;
 
   try {
     try {
-      const cached = await edgeCache.match(cacheKey);
-      if (cached) return new Response(cached.body, cached);
+      const cached = fresh ? undefined : await edgeCache.match(cacheKey);
+      if (cached) {
+        const headers = new Headers(cached.headers);
+        headers.set('Cache-Control', 'no-store');
+        return new Response(cached.body, { status: cached.status, headers });
+      }
     } catch (error) {
       console.warn('House summary cache read failed; using D1.', error);
     }
@@ -46,10 +51,12 @@ export async function GET(request: Request) {
       };
     });
     const response = Response.json({ houses }, {
-      headers: { 'Cache-Control': `public, max-age=${CACHE_SECONDS}` },
+      headers: { 'Cache-Control': 'no-store' },
     });
     try {
-      await edgeCache.put(cacheKey, response.clone());
+      const headers = new Headers(response.headers);
+      headers.set('Cache-Control', `public, max-age=${CACHE_SECONDS}`);
+      await edgeCache.put(cacheKey, new Response(response.clone().body, { headers }));
     } catch (error) {
       console.warn('House summary cache write failed; returning uncached data.', error);
     }

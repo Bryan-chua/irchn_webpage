@@ -43,7 +43,7 @@ type OperationalEvent = {
 };
 
 type OverallData = {
-  event: { status: string; stationControlsLocked: boolean; eventEndAt: number | null; homeRcOnlyAt: number | null; updatedAt: number; updatedBy: string };
+  event: { status: string; stationControlsLocked: boolean; eventEndAt: number | null; eventOpenAt: number | null; eventOpenedAt: number | null; eventClosedAt: number | null; homeRcOnlyAt: number | null; updatedAt: number; updatedBy: string };
   houses: HouseOverview[];
   homeRcStats: HomeRcStats[];
   events: OperationalEvent[];
@@ -52,8 +52,7 @@ type OverallData = {
 
 function localDateTimeValue(timestamp: number | null) {
   if (!timestamp) return '';
-  const date = new Date(timestamp);
-  const local = new Date(timestamp - date.getTimezoneOffset() * 60_000);
+  const local = new Date(timestamp + 8 * 3600000);
   return local.toISOString().slice(0, 16);
 }
 
@@ -78,6 +77,8 @@ export default function OverallModeratorDashboard() {
   const closingTimeDirty = useRef(false);
   const [rcCutoff, setRcCutoff] = useState('');
   const rcCutoffDirty = useRef(false);
+  const [openingTime, setOpeningTime] = useState('');
+  const openingTimeDirty = useRef(false);
 
   const load = useCallback(async () => {
     try {
@@ -86,6 +87,7 @@ export default function OverallModeratorDashboard() {
       const result = await response.json() as OverallData & { error?: string };
       if (!response.ok) throw new Error(result.error || 'Unable to load overall event control.');
       setData(result);
+      if (!openingTimeDirty.current) setOpeningTime(result.event.eventOpenAt ? new Date(result.event.eventOpenAt + 8 * 3600000).toISOString().slice(0, 16) : '');
       if (!rcCutoffDirty.current) setRcCutoff(result.event.homeRcOnlyAt ? new Date(result.event.homeRcOnlyAt + 8 * 3600000).toISOString().slice(0, 16) : '');
       if (!closingTimeDirty.current) setClosingTime(localDateTimeValue(result.event.eventEndAt));
       setError('');
@@ -107,8 +109,10 @@ export default function OverallModeratorDashboard() {
       const result = await response.json() as { error?: string };
       if (!response.ok) throw new Error(result.error || 'Overall dashboard action failed.');
       await load();
+      return true;
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Overall dashboard action failed.');
+      return false;
     } finally {
       setPending('');
     }
@@ -123,9 +127,18 @@ export default function OverallModeratorDashboard() {
   }
 
   async function saveClosingTime() {
-    const eventEndAt = closingTime ? new Date(closingTime).getTime() : null;
+    const eventEndAt = closingTime ? new Date(`${closingTime}:00+08:00`).getTime() : null;
     await update({ eventEndAt }, 'closing-time');
     closingTimeDirty.current = false;
+  }
+
+  async function saveOpeningTime(clear = false) {
+    const eventOpenAt = clear ? null : new Date(`${openingTime}:00+08:00`).getTime();
+    if (eventOpenAt !== null && !Number.isFinite(eventOpenAt)) { setError('Choose a valid opening time.'); return; }
+    if (await update({ eventOpenAt }, 'opening-time')) {
+      openingTimeDirty.current = false;
+      if (clear) setOpeningTime('');
+    }
   }
 
   async function logout() {
@@ -153,7 +166,12 @@ export default function OverallModeratorDashboard() {
           <button className={data?.event.status === 'paused' ? 'selected warning' : 'warning'} disabled={Boolean(pending)} onClick={() => void changeGlobalStatus('paused')}>Pause all & lock</button>
           <button className={data?.event.status === 'closed' ? 'selected danger' : 'danger'} disabled={Boolean(pending)} onClick={() => void changeGlobalStatus('closed')}>Close all & lock</button>
         </div>
-        <div className="closing-time-control"><label htmlFor="event-closing-time">EVENT CLOSING TIME</label><div><input id="event-closing-time" type="datetime-local" value={closingTime} onChange={(event) => { closingTimeDirty.current = true; setClosingTime(event.target.value); }} /><button disabled={Boolean(pending)} onClick={() => void saveClosingTime()}>Save</button></div></div>
+        <div className="closing-time-control"><label htmlFor="event-closing-time">EVENT CLOSING TIME (SINGAPORE TIME)</label><div><input id="event-closing-time" type="datetime-local" value={closingTime} onChange={(event) => { closingTimeDirty.current = true; setClosingTime(event.target.value); }} /><button disabled={Boolean(pending)} onClick={() => void saveClosingTime()}>Save</button></div><p>{data?.event.eventClosedAt ? `Closed automatically at ${new Date(data.event.eventClosedAt).toLocaleString('en-SG', { timeZone: 'Asia/Singapore', dateStyle: 'medium', timeStyle: 'short' })} SGT.` : data?.event.eventEndAt ? 'Automatically closes all six queues and locks station controls at this time. Existing tickets remain viewable.' : 'No automatic closing time is set.'}</p></div>
+      </section>
+
+      <section className="overall-control-panel rc-cutoff-control">
+        <div><small>SCHEDULED OPENING</small><h2>Open all houses automatically</h2><p>At this time, all six queues will open and station status controls will unlock. The schedule runs once. Manual global open, pause or close controls cancel a pending opening.</p><p>{!data?.event.eventOpenAt ? 'No opening time is scheduled.' : data.event.eventOpenedAt ? `Opened automatically at ${new Date(data.event.eventOpenedAt).toLocaleString('en-SG', { timeZone: 'Asia/Singapore', dateStyle: 'medium', timeStyle: 'short' })} SGT.` : data.event.eventEndAt && data.generatedAt >= data.event.eventEndAt ? 'This opening schedule has expired. Choose a new opening time.' : `Scheduled for ${new Date(data.event.eventOpenAt).toLocaleString('en-SG', { timeZone: 'Asia/Singapore', dateStyle: 'medium', timeStyle: 'short' })} SGT.`}</p></div>
+        <div className="closing-time-control"><label htmlFor="event-opening-time">OPEN ALL HOUSES AT (SINGAPORE TIME)</label><div><input id="event-opening-time" type="datetime-local" value={openingTime} onChange={(event) => { openingTimeDirty.current = true; setOpeningTime(event.target.value); }} /><button disabled={Boolean(pending) || !data || !openingTime} onClick={() => void saveOpeningTime()}>Save opening</button></div><button disabled={Boolean(pending) || !data?.event.eventOpenAt} onClick={() => void saveOpeningTime(true)}>Clear opening</button></div>
       </section>
 
       <section className="overall-control-panel rc-cutoff-control">

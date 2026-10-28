@@ -64,6 +64,20 @@
       "when": 1793155219774,
       "tag": "0008_numerous_blockbuster",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1793172786995,
+      "tag": "0009_curvy_pete_wisdom",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1793174202271,
+      "tag": "0010_productive_stryfe",
+      "breakpoints": true
     }
   ]
 }

@@ -10,7 +10,7 @@ A mobile-first virtual queue for **Inter-RC Halloween Night 2026**, covering six
 
 - View all six haunted houses from one mobile-friendly home page.
 - Select a home RC in a popup after the first-visit guide and before announcements. The choice is remembered in the browser and tied to the anonymous device token on the server.
-- See each house's live queue status, number of waiting groups, and estimated wait time.
+- See each house's live queue status, number of waiting groups, and estimated wait time. House cards refresh about every four seconds while visible, and immediately when returning to the tab or reconnecting. Return-to-tab checks bypass the shared cache.
 - Join any open queue with a memorable team nickname and a group size of 1–8 people, 4–8 people for Tembusu, or 1–5 people for RC4.
 - Receive a unique queue number, such as `RV-0420`, for the whole group.
 - See a live ticket with the house, queue number, group size, groups ahead, estimated wait, and ticket status.
@@ -48,9 +48,10 @@ Team nicknames are visible only to the participant who just joined and the stati
 - Publish or remove a participant announcement popup. Publishing replaces the active announcement; each new announcement is shown once per browser after dismissal.
 - Open participant pages check for announcements every 10 seconds while visible, with retries backing off to 60 seconds on failure. Returning to a tab or reconnecting triggers an immediate check. On the homepage, the first-visit info tip and participant guide take priority.
 - Open and unlock all houses, or pause/close all houses while locking station status controls.
+- Set, change or clear a one-time **scheduled opening** in Singapore time. It automatically opens all six queues and unlocks station status controls without the dashboard staying open. Manual global open/pause/close cancels a pending opening.
 - Control individual house statuses while the event is unlocked.
 - Set or clear a separate **Home RC only** cutoff in Singapore time. At the cutoff, outside-RC waiting and skipped tickets (including tickets without a selected RC) are cancelled, and new outside-RC joins are blocked. Own-RC tickets remain valid. Clearing or postponing the cutoff does not restore cancelled tickets.
-- Compare house status, estimated clear time, delays, skipped groups, station activity, and capacity against an editable event closing time.
+- Set an automatic event closing time in Singapore time. All six queues close and station status controls lock at that time; existing tickets remain viewable. The same closing time supports capacity projections.
 - Review and acknowledge persistent operational alerts without deleting their history.
 - Review an audit log of global and station status changes and security warnings.
 - View estimated participants and total haunted-house admissions by home RC in the overall dashboard.
@@ -64,7 +65,7 @@ Team nicknames are visible only to the participant who just joined and the stati
 - New joins are rejected while a queue is paused or closed; existing tickets remain viewable.
 - Queue numbers are generated with cryptographically secure randomness and protected by a database uniqueness constraint.
 - Moderator sessions use station-scoped, HTTP-only, same-site cookies derived from a server secret. Production cookies are also secure-only and expire after 12 hours.
-- Individual tickets and moderator queue responses use `Cache-Control: no-store`; public house summaries use a three-second cache.
+- Individual tickets and moderator queue responses use `Cache-Control: no-store`; public house summaries use a three-second shared edge cache while disabling browser caching.
 - D1 tables, indexes, and event-control records are managed through versioned migrations.
 - Open Graph and Twitter metadata provide a share preview for the event site.
 
@@ -193,7 +194,7 @@ The production Worker is named `irchn-queue`. It uses the APAC D1 database `irch
    npm run deploy
    ```
 
-The deploy command applies versioned D1 migrations before publishing the Worker. The Drizzle schema is stored in `db/schema.ts`, with generated migrations in `drizzle/`.
+The deploy command applies versioned D1 migrations before publishing the Worker. `worker.ts` preserves the vinext request handler and adds a Cloudflare Cron Trigger that checks for scheduled opening and closing every minute. Queue requests also apply due schedules. Opening or closing all houses and recording the action happen atomically, once, so subsequent manual overall controls can override an action that has already fired. Opening times must be in the future and before the configured closing time; an overdue opening is not applied after closing. Changing the closing time rearms automatic closing; clearing it disables automatic closing without reopening houses. Selecting a past closing time applies it immediately. New joins check house status and an unapplied closing deadline atomically when the ticket is inserted. The Drizzle schema is stored in `db/schema.ts`, with generated migrations in `drizzle/`.
 
 ## Privacy and retention
 
@@ -205,7 +206,7 @@ Completed records are retained temporarily for operational history. Organisers s
 
 - Set six unique station access codes, a separate overall-moderator PIN, and a strong session secret.
 - Confirm each house's configured time per group in `MINUTES_PER_GROUP`.
-- Sign in as Bryan, set the event closing time and optional home-RC-only cutoff (Singapore time), then use **Close all & lock** until the activity is ready to begin.
+- Sign in as Bryan, set the event closing time and optional home-RC-only cutoff (Singapore time), then use **Close all & lock**. If desired, set a scheduled opening afterwards. Using manual global controls again cancels that schedule.
 - Have every station load its dashboard and download or print an initial emergency queue backup; refresh the download periodically during the event.
 - Decide how long skipped groups may return and whether they retain their original position.
 - Test participant joining, ticket lookup, and all six station logins on the devices that will be used.
